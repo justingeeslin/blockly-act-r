@@ -453,11 +453,21 @@
 
   const codeOutput = document.getElementById("codeOutput");
   const statusText = document.getElementById("statusText");
+  const runButton = document.getElementById("runButton");
+  const runOutput = document.getElementById("runOutput");
+  const runStatusText = document.getElementById("runStatusText");
   const loadInput = document.getElementById("loadInput");
   const storageKey = "blockly-act-r-workspace";
+  const runnerEndpoint = "https://act-r-2649d1971396.herokuapp.com/run-model";
+  const generatedModelUrlBase = "https://httpbingo.org/base64/";
+  const defaultRunSeconds = 5;
 
   function setStatus(text) {
     statusText.textContent = text;
+  }
+
+  function setRunStatus(text) {
+    runStatusText.textContent = text;
   }
 
   function generateCode() {
@@ -465,9 +475,131 @@
       const code = window.ACTRLisp.workspaceToCode(workspace);
       codeOutput.textContent = code || ";";
       setStatus(`${workspace.getAllBlocks(false).length} blocks`);
+      return code;
     } catch (error) {
       codeOutput.textContent = `; Generator error: ${error.message}`;
       setStatus("Generator error");
+      return "";
+    }
+  }
+
+  function encodeBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    const chunkSize = 0x8000;
+    let binary = "";
+
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    }
+
+    return btoa(binary);
+  }
+
+  function createGeneratedModelUrl(code) {
+    return `${generatedModelUrlBase}${encodeURIComponent(encodeBase64(code))}`;
+  }
+
+  function inferRunSeconds(code) {
+    const matches = [...code.matchAll(/\(run\s+([0-9]+(?:\.[0-9]+)?)\s*\)/gi)];
+    const match = matches[matches.length - 1];
+    const seconds = match ? Number(match[1]) : defaultRunSeconds;
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : defaultRunSeconds;
+  }
+
+  function formatSeconds(value) {
+    return Number.isFinite(value) ? `${Number(value.toFixed(3))}s` : "";
+  }
+
+  function formatRunResult(result, codeLength) {
+    const lines = [];
+    lines.push(`Run ID: ${result.run_id || "unknown"}`);
+
+    if (result.current_model) {
+      lines.push(`Model: ${result.current_model}`);
+    }
+
+    if (Array.isArray(result.models) && result.models.length) {
+      lines.push(`Loaded models: ${result.models.join(", ")}`);
+    }
+
+    lines.push(`Model source: generated HTTPS payload (${codeLength} chars)`);
+
+    if (Number.isFinite(result.run_seconds)) {
+      lines.push(`Run seconds: ${formatSeconds(result.run_seconds)}`);
+    }
+
+    if (Number.isFinite(result.elapsed_seconds)) {
+      lines.push(`Elapsed: ${formatSeconds(result.elapsed_seconds)}`);
+    }
+
+    if (result.run_result !== undefined) {
+      lines.push(`Run result: ${JSON.stringify(result.run_result)}`);
+    }
+
+    if (result.trace) {
+      lines.push("", "Trace:", result.trace.trimEnd());
+    } else {
+      lines.push("", "Response:", JSON.stringify(result, null, 2));
+    }
+
+    return lines.join("\n");
+  }
+
+  function formatRunError(error, result) {
+    const details = result ? JSON.stringify(result, null, 2) : "";
+    return [`; Run failed: ${error.message}`, details].filter(Boolean).join("\n\n");
+  }
+
+  async function runModel() {
+    const code = generateCode();
+
+    if (!code.trim()) {
+      setRunStatus("No model");
+      runOutput.textContent = "; Add ACT-R blocks before running.";
+      return;
+    }
+
+    const runSeconds = inferRunSeconds(code);
+    const modelUrl = createGeneratedModelUrl(code);
+    runButton.disabled = true;
+    runButton.setAttribute("aria-busy", "true");
+    setRunStatus("Running");
+    runOutput.textContent = `Submitting model for a ${formatSeconds(runSeconds)} run...`;
+
+    try {
+      const response = await fetch(runnerEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model_url: modelUrl,
+          run_seconds: runSeconds,
+        }),
+      });
+      const text = await response.text();
+      let result = null;
+
+      try {
+        result = text ? JSON.parse(text) : null;
+      } catch (error) {
+        throw new Error(`Runner returned non-JSON response (${response.status}).`);
+      }
+
+      if (!response.ok || !result || result.ok === false) {
+        const runError = new Error((result && result.error) || `Runner returned HTTP ${response.status}.`);
+        runError.result = result;
+        throw runError;
+      }
+
+      setRunStatus("Complete");
+      runOutput.textContent = formatRunResult(result, code.length);
+    } catch (error) {
+      setRunStatus("Failed");
+      runOutput.textContent = formatRunError(error, error.result);
+    } finally {
+      runButton.disabled = false;
+      runButton.removeAttribute("aria-busy");
     }
   }
 
@@ -505,6 +637,8 @@
     link.remove();
     URL.revokeObjectURL(url);
   }
+
+  runButton.addEventListener("click", runModel);
 
   document.getElementById("sampleButton").addEventListener("click", () => {
     loadXmlText(sampleXml);

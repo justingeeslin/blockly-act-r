@@ -14,6 +14,12 @@ Then visit `http://127.0.0.1:5173`.
 
 The app loads Blockly from a pinned CDN and keeps the ACT-R blocks and generator in `src/`.
 
+## Run a Model
+
+Use the green **Run** button to evaluate the generated Lisp with the ACT-R runner at `https://act-r-2649d1971396.herokuapp.com/run-model`.
+
+The runner requires a public `http` or `https` `model_url`, so the app encodes the current Lisp into a fetchable HTTPS base64 payload URL and posts that URL as JSON. If the model contains a `(run N)` form, `N` is sent as `run_seconds`; otherwise the app uses 5 seconds.
+
 ## Included Blocks
 
 - ACT-R model forms: `define-model`, `sgp`, `goal-focus`, `run`, raw Lisp.

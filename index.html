@@ -13,6 +13,9 @@
         <span class="build-label">Lisp model builder</span>
       </div>
       <nav class="toolbar" aria-label="Workspace actions">
+        <button id="runButton" type="button" class="play" title="Run model" aria-label="Run model">
+          <span aria-hidden="true">Run</span>
+        </button>
         <button id="sampleButton" type="button" title="Load sample model" aria-label="Load sample model">
           <span aria-hidden="true">Sample</span>
         </button>
@@ -38,12 +41,17 @@
       <section class="workspace-shell" aria-label="Blockly workspace">
         <div id="blocklyDiv"></div>
       </section>
-      <aside class="code-shell" aria-label="Generated ACT-R Lisp">
+      <aside class="code-shell" aria-label="Generated ACT-R Lisp and run output">
         <div class="code-header">
           <h2>ACT-R Lisp</h2>
           <span id="statusText" role="status" aria-live="polite">Ready</span>
         </div>
         <pre id="codeOutput" tabindex="0"></pre>
+        <div class="run-header">
+          <h2>Run Output</h2>
+          <span id="runStatusText" role="status" aria-live="polite">Idle</span>
+        </div>
+        <pre id="runOutput" tabindex="0"></pre>
       </aside>
     </main>
 
