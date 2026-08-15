@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blockly ACT-R</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="title-group">
+        <h1>Blockly ACT-R</h1>
+        <span class="build-label">Lisp model builder</span>
+      </div>
+      <nav class="toolbar" aria-label="Workspace actions">
+        <button id="sampleButton" type="button" title="Load sample model" aria-label="Load sample model">
+          <span aria-hidden="true">Sample</span>
+        </button>
+        <button id="copyButton" type="button" title="Copy Lisp" aria-label="Copy Lisp">
+          <span aria-hidden="true">Copy</span>
+        </button>
+        <button id="downloadButton" type="button" title="Download Lisp" aria-label="Download Lisp">
+          <span aria-hidden="true">Download</span>
+        </button>
+        <button id="saveButton" type="button" title="Save blocks" aria-label="Save blocks">
+          <span aria-hidden="true">Save</span>
+        </button>
+        <button id="loadButton" type="button" title="Load blocks" aria-label="Load blocks">
+          <span aria-hidden="true">Load</span>
+        </button>
+        <button id="clearButton" type="button" class="danger" title="Clear workspace" aria-label="Clear workspace">
+          <span aria-hidden="true">Clear</span>
+        </button>
+      </nav>
+    </header>
+
+    <main class="app-layout">
+      <section class="workspace-shell" aria-label="Blockly workspace">
+        <div id="blocklyDiv"></div>
+      </section>
+      <aside class="code-shell" aria-label="Generated ACT-R Lisp">
+        <div class="code-header">
+          <h2>ACT-R Lisp</h2>
+          <span id="statusText" role="status" aria-live="polite">Ready</span>
+        </div>
+        <pre id="codeOutput" tabindex="0"></pre>
+      </aside>
+    </main>
+
+    <input id="loadInput" type="file" accept=".xml,text/xml" hidden />
+
+    <script src="https://unpkg.com/blockly@10.4.3/blockly_compressed.js"></script>
+    <script src="https://unpkg.com/blockly@10.4.3/blocks_compressed.js"></script>
+    <script src="https://unpkg.com/blockly@10.4.3/msg/en.js"></script>
+    <script src="./src/actr-blocks.js"></script>
+    <script src="./src/actr-generator.js"></script>
+    <script src="./src/app.js"></script>
+  </body>
+</html>
