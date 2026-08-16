@@ -154,6 +154,12 @@
             kind: "block",
             type: "actr_add_button_to_exp_window",
             inputs: {
+              WINDOW: {
+                shadow: {
+                  type: "actr_symbol",
+                  fields: { VALUE: "*window*" },
+                },
+              },
               TEXT: {
                 shadow: {
                   type: "text",
@@ -642,6 +648,83 @@
         (install-device *letter-window*)
         (proc-display)
         (run 2)
+      `,
+    },
+    {
+      id: "fitts-law",
+      name: "Fitts' Law",
+      meta: "Button target, visual attention, mouse movement, and click",
+      lisp: `
+        (clear-all)
+
+        (define-model fitts-law
+          (sgp :v t :trace-detail high :show-focus t :needs-mouse t :incremental-mouse-moves t)
+          (chunk-type goal state)
+
+          (add-dm
+            (start isa goal
+              state find-target))
+
+          (goal-focus start)
+
+          (p find-target
+            =goal>
+              isa goal
+              state find-target
+            ?visual-location>
+              buffer empty
+          ==>
+            +visual-location>
+              isa visual-location
+              :attended nil
+            =goal>
+              state attend-and-move
+          )
+
+          (p attend-and-move
+            =goal>
+              isa goal
+              state attend-and-move
+            =visual-location>
+              isa visual-location
+            ?visual>
+              state free
+            ?manual>
+              state free
+          ==>
+            +visual>
+              isa move-attention
+              screen-pos =visual-location
+            +manual>
+              isa move-cursor
+              loc =visual-location
+            =goal>
+              state click-target
+          )
+
+          (p click-target
+            =goal>
+              isa goal
+              state click-target
+            ?manual>
+              state free
+          ==>
+            +manual>
+              isa click-mouse
+            =goal>
+              state done
+            !output! ("clicked target")
+          )
+        )
+
+        (defvar *fitts-window* nil)
+        (reset)
+        (setf *fitts-window* (open-exp-window "Fitts' Law" :visible nil :width 420 :height 260))
+        (add-button-to-exp-window *fitts-window* :text "Target" :x 282 :y 112 :width 96 :height 42)
+        (install-device *fitts-window*)
+        (start-hand-at-mouse)
+        (proc-display)
+        (run 3)
       `,
     },
   ];

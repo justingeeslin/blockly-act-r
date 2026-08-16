@@ -18,7 +18,7 @@ The app loads Blockly from a pinned CDN and keeps the ACT-R blocks and generator
 
 Use **Load** to open either a saved Blockly XML workspace or an ACT-R Lisp model file (`.lisp`, `.lsp`, or `.cl`). Lisp imports are converted into editable blocks for supported ACT-R forms; unsupported Lisp is preserved as raw Lisp blocks.
 
-Use **Samples** to load an included model. The menu includes the original counting sample and a visual/motor sample that attends to a letter in a window and presses the matching key.
+Use **Samples** to load an included model. The menu includes the original counting sample, a visual/motor sample that attends to a letter in a window and presses the matching key, and a Fitts' Law sample that sees a target button, moves the cursor to it, and clicks it.
 
 ## Run a Model
 

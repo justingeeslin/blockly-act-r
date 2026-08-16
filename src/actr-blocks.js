@@ -490,11 +490,15 @@
     },
     {
       type: "actr_add_button_to_exp_window",
-      message0: "add button %1 at x %2 y %3 width %4 height %5 action %6",
+      message0: "add button %1 to window %2 at x %3 y %4 width %5 height %6 action %7",
       args0: [
         {
           type: "input_value",
           name: "TEXT",
+        },
+        {
+          type: "input_value",
+          name: "WINDOW",
         },
         {
           type: "input_value",

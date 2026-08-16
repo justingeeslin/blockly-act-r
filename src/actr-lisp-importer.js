@@ -590,11 +590,25 @@
 
   function addButtonToExpWindowBlockFor(form) {
     const args = form.items.slice(1);
-    const keywordItems = args.length && !isKeywordNode(args[0]) ? args.slice(1) : args;
+    let keywordItems = args;
+    let windowNode = atom("*window*");
+    let textNode = keywordValueFromItems(keywordItems, ":text");
+
+    if (args.length && !isKeywordNode(args[0])) {
+      windowNode = args[0];
+      keywordItems = args.slice(1);
+      textNode = keywordValueFromItems(keywordItems, ":text");
+
+      if (!textNode && keywordItems.length && !isKeywordNode(keywordItems[0])) {
+        textNode = keywordItems[0];
+        keywordItems = keywordItems.slice(1);
+      }
+    }
 
     return block("actr_add_button_to_exp_window", {
       values: {
-        TEXT: keywordValueBlock(keywordItems, ":text", stringNode("OK")),
+        TEXT: valueBlockFor(textNode || stringNode("OK")),
+        WINDOW: valueBlockFor(windowNode),
         X: keywordValueBlock(keywordItems, ":x", atom("0")),
         Y: keywordValueBlock(keywordItems, ":y", atom("0")),
         WIDTH: keywordValueBlock(keywordItems, ":width", atom("80")),

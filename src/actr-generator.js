@@ -237,13 +237,14 @@
 
   define("actr_add_button_to_exp_window", (block) => {
     const text = valueCode(block, "TEXT", quoteString("OK"));
+    const window = valueCode(block, "WINDOW", "*window*");
     const x = valueCode(block, "X", "0");
     const y = valueCode(block, "Y", "0");
     const width = valueCode(block, "WIDTH", "80");
     const height = valueCode(block, "HEIGHT", "30");
     const action = valueCode(block, "ACTION", "nil");
     const actionCode = isNilCode(action) ? "" : ` :action ${action}`;
-    return `(add-button-to-exp-window :text ${text} :x ${x} :y ${y} :width ${width} :height ${height}${actionCode})\n`;
+    return `(add-button-to-exp-window ${window} :text ${text} :x ${x} :y ${y} :width ${width} :height ${height}${actionCode})\n`;
   });
 
   define("actr_clear_exp_window", () => "(clear-exp-window)\n");
