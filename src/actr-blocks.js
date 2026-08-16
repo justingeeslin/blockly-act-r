@@ -405,6 +405,21 @@
       helpUrl: "",
     },
     {
+      type: "actr_output",
+      message0: "output to trace %1",
+      args0: [
+        {
+          type: "input_value",
+          name: "MESSAGE",
+        },
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_PRODUCTION,
+      tooltip: "Print an item or string in the ACT-R model trace with !output!.",
+      helpUrl: "",
+    },
+    {
       type: "actr_symbol",
       message0: "symbol %1",
       args0: [

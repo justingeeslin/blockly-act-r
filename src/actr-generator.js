@@ -207,6 +207,11 @@
 
   define("actr_buffer_clear", (block) => `${bufferHead("-", block.getFieldValue("BUFFER"))}\n`);
 
+  define("actr_output", (block) => {
+    const message = valueCode(block, "MESSAGE", quoteString("message"));
+    return `!output! (${message})\n`;
+  });
+
   define("actr_symbol", (block) => [
     cleanSymbol(block.getFieldValue("VALUE"), "symbol"),
     generator.ORDER_ATOMIC,

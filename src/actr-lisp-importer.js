@@ -525,7 +525,12 @@
       : null;
   }
 
-  function splitBufferSections(terms) {
+  function isOutputOperator(node) {
+    const operator = lowerSymbol(node);
+    return operator === "!output!" || operator === "!output";
+  }
+
+  function splitBufferSections(terms, options = {}) {
     const sections = [];
     let current = null;
     let looseTerms = [];
@@ -537,14 +542,34 @@
       }
     }
 
-    for (const term of terms) {
+    function flushCurrent() {
+      if (current) {
+        sections.push(current);
+        current = null;
+      }
+    }
+
+    for (let index = 0; index < terms.length; index += 1) {
+      const term = terms[index];
       const head = bufferHeadFor(term);
+
+      if (options.includeOutput && isOutputOperator(term)) {
+        flushLooseTerms();
+        flushCurrent();
+
+        if (terms[index + 1]) {
+          sections.push({ output: true, term: terms[index + 1] });
+          index += 1;
+        } else {
+          sections.push({ raw: true, terms: [term] });
+        }
+
+        continue;
+      }
 
       if (head) {
         flushLooseTerms();
-        if (current) {
-          sections.push(current);
-        }
+        flushCurrent();
         current = { ...head, terms: [], headNode: term };
         continue;
       }
@@ -557,10 +582,7 @@
     }
 
     flushLooseTerms();
-
-    if (current) {
-      sections.push(current);
-    }
+    flushCurrent();
 
     return sections;
   }
@@ -573,7 +595,29 @@
     return [`${section.op}${section.buffer}>`, ...section.terms.map(nodeToSource)].join(" ");
   }
 
+  function outputValueBlockFor(term) {
+    if (!term) {
+      return block("text", { fields: { TEXT: "message" } });
+    }
+
+    if (isList(term)) {
+      if (term.items.length === 1) {
+        return valueBlockFor(term.items[0]);
+      }
+
+      return rawValueBlock(term.items.map(nodeToSource).join(" "));
+    }
+
+    return valueBlockFor(term);
+  }
+
   function blockForBufferSection(section, role) {
+    if (role === "action" && section.output) {
+      return block("actr_output", {
+        values: { MESSAGE: outputValueBlockFor(section.term) },
+      });
+    }
+
     if (section.raw || !KNOWN_BUFFERS.has(section.buffer)) {
       return rawStatementBlock(sectionToSource(section));
     }
@@ -652,8 +696,8 @@
     const conditionBlocks = splitBufferSections(items.slice(2, separatorIndex)).map((section) =>
       blockForBufferSection(section, "condition"),
     );
-    const actionBlocks = splitBufferSections(items.slice(separatorIndex + 1)).map((section) =>
-      blockForBufferSection(section, "action"),
+    const actionBlocks = splitBufferSections(items.slice(separatorIndex + 1), { includeOutput: true }).map(
+      (section) => blockForBufferSection(section, "action"),
     );
 
     return block("actr_production", {

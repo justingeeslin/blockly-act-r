@@ -70,6 +70,18 @@
           { kind: "block", type: "actr_buffer_request" },
           { kind: "block", type: "actr_buffer_update" },
           { kind: "block", type: "actr_buffer_clear" },
+          {
+            kind: "block",
+            type: "actr_output",
+            inputs: {
+              MESSAGE: {
+                shadow: {
+                  type: "text",
+                  fields: { TEXT: "message" },
+                },
+              },
+            },
+          },
         ],
       },
       {
