@@ -192,9 +192,9 @@ h2 {
 .code-shell {
   display: grid;
   grid-template-rows:
-    auto minmax(120px, 0.78fr)
-    auto minmax(96px, 0.48fr)
-    auto minmax(220px, 0.82fr);
+    auto minmax(108px, 0.58fr)
+    auto minmax(80px, 0.34fr)
+    auto minmax(300px, 1.25fr);
 }
 
 .code-header,
@@ -328,39 +328,80 @@ h2 {
 
 .visualizer-stage {
   position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 10px;
   min-height: 0;
   overflow: hidden;
+  isolation: isolate;
 }
 
-.memory-node {
-  justify-self: start;
-  max-width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #b6c8bd;
-  border-radius: 8px;
-  background: #edf6f0;
-  color: #1d4f3b;
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1.2;
+.architecture-edges {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.architecture-edge {
+  fill: none;
+  stroke: #9aa7b0;
+  stroke-width: 1.2;
+  opacity: 0.5;
+}
+
+.architecture-edge.is-memory {
+  stroke: #6b9ac9;
+  stroke-dasharray: 5 5;
+  opacity: 0.42;
+}
+
+.architecture-edge.is-buffer-read,
+.architecture-edge.is-buffer-write {
+  stroke: #8b949d;
+}
+
+.architecture-edge.is-environment {
+  stroke: #8d6bb8;
+  stroke-dasharray: 6 4;
+  opacity: 0.45;
+}
+
+.architecture-edge.is-active {
+  stroke: #157f56;
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.architecture-layer {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(132px, 1.2fr) minmax(100px, 1fr);
+  grid-template-rows: minmax(38px, 0.72fr) repeat(5, minmax(34px, 1fr)) minmax(44px, 0.82fr);
+  grid-template-areas:
+    "declarative declarative declarative"
+    "retrieval productions visual"
+    "goal productions visualLocation"
+    "imaginal productions manual"
+    "vocal productions aural"
+    "temporal productions auxiliary"
+    "environment environment environment";
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+  padding: 4px;
 }
 
 .buffer-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-  gap: 8px;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 2px;
+  display: contents;
 }
 
-.buffer-card {
+.architecture-node {
   position: relative;
-  min-height: 92px;
-  padding: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -371,14 +412,129 @@ h2 {
     background 160ms ease;
 }
 
-.buffer-card.is-active {
-  border-color: #1b8064;
-  background: #f0fbf5;
-  box-shadow: 0 0 0 2px rgba(34, 108, 91, 0.16);
+.memory-node {
+  grid-area: declarative;
+  display: flex;
+  align-items: center;
+  background: #edf6f0;
+  border-color: #b6c8bd;
+  color: #1d4f3b;
+}
+
+.environment-node {
+  grid-area: environment;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4efff;
+  border-color: #cbbdf2;
+  color: #443065;
+}
+
+.productions-node {
+  grid-area: productions;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff7e8;
+  border-color: #e5c56f;
+  color: #533d12;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.node-title,
+.node-subtitle {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.node-subtitle {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.auxiliary-buffer-grid {
+  grid-area: auxiliary;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+}
+
+.buffer-card {
+  background: #ffffff;
+}
+
+.buffer-card[data-buffer="retrieval"] {
+  grid-area: retrieval;
+}
+
+.buffer-card[data-buffer="goal"] {
+  grid-area: goal;
+}
+
+.buffer-card[data-buffer="visual-location"] {
+  grid-area: visualLocation;
+}
+
+.buffer-card[data-buffer="visual"] {
+  grid-area: visual;
+}
+
+.buffer-card[data-buffer="manual"] {
+  grid-area: manual;
+}
+
+.buffer-card[data-buffer="imaginal"] {
+  grid-area: imaginal;
+}
+
+.buffer-card[data-buffer="vocal"] {
+  grid-area: vocal;
+}
+
+.buffer-card[data-buffer="aural"] {
+  grid-area: aural;
+}
+
+.buffer-card[data-buffer="temporal"] {
+  grid-area: temporal;
+}
+
+.auxiliary-buffer-grid .buffer-card {
+  min-height: 38px;
+  padding: 5px 6px;
 }
 
 .buffer-card.is-empty {
   background: #fbfcfd;
+}
+
+.buffer-card.is-pending {
+  border-style: dashed;
+  background: #fffaf0;
+}
+
+.buffer-card.is-active {
+  border-color: #1b8064;
+  background: #f0fbf5;
+  box-shadow: 0 0 0 2px rgba(34, 108, 91, 0.16);
 }
 
 .buffer-name,
@@ -392,15 +548,15 @@ h2 {
 
 .buffer-name {
   color: var(--muted);
-  font-size: 0.73rem;
+  font-size: 0.66rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .chunk-name {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--ink);
-  font-size: 0.86rem;
+  font-size: 0.76rem;
   font-weight: 800;
 }
 
@@ -412,11 +568,11 @@ h2 {
 .slot-list {
   display: grid;
   gap: 2px;
-  margin-top: 6px;
+  margin-top: 4px;
   color: #40515a;
   font-family: var(--mono);
-  font-size: 0.72rem;
-  line-height: 1.35;
+  font-size: 0.62rem;
+  line-height: 1.25;
 }
 
 .slot-row {

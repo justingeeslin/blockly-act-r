@@ -84,8 +84,19 @@
             <input id="traceSlider" type="range" min="0" max="0" value="0" aria-label="Trace event" />
           </div>
           <div id="visualizerStage" class="visualizer-stage" aria-live="polite">
-            <div id="memoryNode" class="memory-node">Declarative memory</div>
-            <div id="bufferGrid" class="buffer-grid"></div>
+            <svg id="architectureEdges" class="architecture-edges" aria-hidden="true"></svg>
+            <div class="architecture-layer">
+              <div id="memoryNode" class="architecture-node memory-node" data-node="declarative-memory">
+                <span class="node-title">Declarative memory</span>
+              </div>
+              <div class="architecture-node productions-node" data-node="productions">
+                <span class="node-title">Productions</span>
+              </div>
+              <div id="bufferGrid" class="buffer-grid"></div>
+              <div class="architecture-node environment-node" data-node="environment">
+                <span class="node-title">Environment</span>
+              </div>
+            </div>
             <div id="chunkToken" class="chunk-token" aria-hidden="true"></div>
           </div>
           <div id="traceEventLabel" class="trace-event-label">No trace</div>

@@ -465,6 +465,7 @@
   const traceTimeLabel = document.getElementById("traceTimeLabel");
   const traceEventLabel = document.getElementById("traceEventLabel");
   const visualizerStage = document.getElementById("visualizerStage");
+  const architectureEdges = document.getElementById("architectureEdges");
   const memoryNode = document.getElementById("memoryNode");
   const bufferGrid = document.getElementById("bufferGrid");
   const chunkToken = document.getElementById("chunkToken");
@@ -483,6 +484,8 @@
     "aural",
     "temporal",
   ];
+  const coreArchitectureBuffers = new Set(defaultBuffers);
+  const environmentBuffers = new Set(["visual-location", "visual", "manual"]);
   let traceFrames = [];
   let traceFrameIndex = 0;
   let tracePlaybackTimer = null;
@@ -622,6 +625,10 @@
 
   function normalizeBufferName(value) {
     return normalizeTraceKey(value, "goal").replace(/^[+=?-]+/, "").replace(/>$/, "");
+  }
+
+  function bufferNodeId(buffer) {
+    return `buffer:${normalizeBufferName(buffer)}`;
   }
 
   function escapeHtml(value) {
@@ -1119,6 +1126,47 @@
   function applyTraceEventToBuffers(event, buffers, context, activeProductionKey, bindings) {
     const production = context.productions.get(activeProductionKey);
 
+    if (event.kind === "production") {
+      event.motion = null;
+      return;
+    }
+
+    if (event.kind === "buffer-read" || event.kind === "buffer-query") {
+      event.motion = {
+        from: bufferNodeId(event.buffer),
+        to: "productions",
+        buffer: event.buffer,
+        label: event.buffer,
+      };
+      return;
+    }
+
+    if (event.kind === "chunk-retrieved") {
+      const catalogChunk = event.chunk && context.chunks.get(event.chunk);
+      const retrievedChunk =
+        catalogChunk ||
+        (event.chunk && event.chunk !== "nil"
+          ? {
+              key: event.chunk,
+              name: event.chunkName || event.chunk,
+              type: "chunk",
+              slots: {},
+              pending: false,
+            }
+          : null);
+
+      buffers.retrieval = cloneChunk(retrievedChunk);
+      event.motion = retrievedChunk
+        ? {
+            from: "declarative-memory",
+            to: bufferNodeId("retrieval"),
+            buffer: "retrieval",
+            label: retrievedChunk.name,
+          }
+        : null;
+      return;
+    }
+
     if (event.kind === "buffer-set") {
       const catalogChunk = event.chunk && context.chunks.get(event.chunk);
       const nextChunk =
@@ -1135,8 +1183,8 @@
 
       event.motion = nextChunk
         ? {
-            from: "memory",
-            to: "buffer",
+            from: "declarative-memory",
+            to: bufferNodeId(event.buffer),
             buffer: event.buffer,
             label: nextChunk.name,
           }
@@ -1149,8 +1197,8 @@
       const currentChunk = buffers[event.buffer];
       event.motion = currentChunk
         ? {
-            from: "buffer",
-            to: "memory",
+            from: bufferNodeId(event.buffer),
+            to: "productions",
             buffer: event.buffer,
             label: currentChunk.name,
           }
@@ -1179,8 +1227,8 @@
         },
       };
       event.motion = {
-        from: "buffer",
-        to: "buffer",
+        from: "productions",
+        to: bufferNodeId(event.buffer),
         buffer: event.buffer,
         label: buffers[event.buffer].name,
       };
@@ -1200,10 +1248,10 @@
         pending: true,
       };
       event.motion = {
-        from: "buffer",
-        to: "memory",
+        from: "productions",
+        to: bufferNodeId(event.buffer),
         buffer: event.buffer,
-        label: requestedChunk ? requestedChunk.name : "request",
+        label: "request",
       };
     }
   }
@@ -1303,34 +1351,151 @@
     const buffers = frame ? frame.buffers : {};
     const activeBuffer = frame ? frame.activeBuffer : "";
 
-    bufferGrid.innerHTML = order
-      .map((buffer) => {
-        const chunk = buffers[buffer];
-        const classes = ["buffer-card"];
-        if (!chunk) {
-          classes.push("is-empty");
-        }
-        if (chunk && chunk.pending) {
-          classes.push("is-pending");
-        }
-        if (buffer === activeBuffer) {
-          classes.push("is-active");
-        }
+    const renderCard = (buffer) => {
+      const chunk = buffers[buffer];
+      const classes = ["architecture-node", "buffer-card"];
+      if (!chunk) {
+        classes.push("is-empty");
+      }
+      if (chunk && chunk.pending) {
+        classes.push("is-pending");
+      }
+      if (buffer === activeBuffer) {
+        classes.push("is-active");
+      }
 
-        const chunkName = chunk ? (chunk.pending ? `requesting ${chunk.type}` : chunk.name) : "empty";
-        return `
-          <article class="${classes.join(" ")}" data-buffer="${escapeHtml(buffer)}">
-            <span class="buffer-name" title="${escapeHtml(buffer)}">${escapeHtml(buffer)}</span>
-            <span class="chunk-name" title="${escapeHtml(chunkName)}">${escapeHtml(chunkName)}</span>
-            <div class="slot-list">${formatSlotRows(chunk)}</div>
-          </article>
-        `;
-      })
-      .join("");
+      const chunkName = chunk ? (chunk.pending ? `requesting ${chunk.type}` : chunk.name) : "empty";
+      return `
+        <article class="${classes.join(" ")}" data-buffer="${escapeHtml(buffer)}" data-node="${escapeHtml(bufferNodeId(buffer))}">
+          <span class="buffer-name" title="${escapeHtml(buffer)}">${escapeHtml(buffer)}</span>
+          <span class="chunk-name" title="${escapeHtml(chunkName)}">${escapeHtml(chunkName)}</span>
+          <div class="slot-list">${formatSlotRows(chunk)}</div>
+        </article>
+      `;
+    };
+    const coreCards = [];
+    const auxiliaryCards = [];
+
+    for (const buffer of order) {
+      if (coreArchitectureBuffers.has(buffer)) {
+        coreCards.push(renderCard(buffer));
+      } else {
+        auxiliaryCards.push(renderCard(buffer));
+      }
+    }
+
+    bufferGrid.innerHTML = [
+      coreCards.join(""),
+      auxiliaryCards.length
+        ? `<div class="auxiliary-buffer-grid" data-node="auxiliary-buffers">${auxiliaryCards.join("")}</div>`
+        : "",
+    ].join("");
   }
 
   function getBufferCard(buffer) {
     return [...bufferGrid.querySelectorAll(".buffer-card")].find((card) => card.dataset.buffer === buffer);
+  }
+
+  function getArchitectureNode(nodeId) {
+    if (!nodeId) {
+      return null;
+    }
+
+    if (nodeId === "memory" || nodeId === "declarative-memory") {
+      return memoryNode;
+    }
+
+    if (nodeId.startsWith("buffer:")) {
+      return getBufferCard(nodeId.slice("buffer:".length));
+    }
+
+    return visualizerStage.querySelector(`[data-node="${nodeId}"]`);
+  }
+
+  function architectureNodeCenter(nodeId) {
+    const element = getArchitectureNode(nodeId);
+    if (!element) {
+      return null;
+    }
+
+    return centerWithinStage(element);
+  }
+
+  function edgePath(from, to) {
+    const dx = Math.abs(to.x - from.x);
+    const midX = from.x + (to.x - from.x) / 2;
+    const bend = Math.min(36, Math.max(12, dx / 4));
+    const c1x = from.x === to.x ? from.x - bend : midX;
+    const c2x = from.x === to.x ? to.x + bend : midX;
+
+    return `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} C ${c1x.toFixed(1)} ${from.y.toFixed(1)}, ${c2x.toFixed(1)} ${to.y.toFixed(1)}, ${to.x.toFixed(1)} ${to.y.toFixed(1)}`;
+  }
+
+  function collectArchitectureEdges(frame) {
+    const order = frame && frame.bufferOrder && frame.bufferOrder.length ? frame.bufferOrder : defaultBuffers;
+    const edges = [];
+
+    for (const buffer of order) {
+      const bufferNode = bufferNodeId(buffer);
+      edges.push(
+        { from: "declarative-memory", to: bufferNode, kind: "memory" },
+        { from: bufferNode, to: "productions", kind: "buffer-read" },
+        { from: "productions", to: bufferNode, kind: "buffer-write" },
+      );
+
+      if (environmentBuffers.has(buffer)) {
+        edges.push(
+          { from: "environment", to: bufferNode, kind: "environment" },
+          { from: bufferNode, to: "environment", kind: "environment" },
+        );
+      }
+    }
+
+    return edges;
+  }
+
+  function drawArchitectureEdges(frame) {
+    if (!architectureEdges) {
+      return;
+    }
+
+    const stageRect = visualizerStage.getBoundingClientRect();
+    if (!stageRect.width || !stageRect.height) {
+      architectureEdges.innerHTML = "";
+      return;
+    }
+
+    architectureEdges.setAttribute("viewBox", `0 0 ${stageRect.width} ${stageRect.height}`);
+    const motion = frame && frame.event && frame.event.motion;
+    const paths = collectArchitectureEdges(frame)
+      .map((edge) => {
+        const from = architectureNodeCenter(edge.from);
+        const to = architectureNodeCenter(edge.to);
+        if (!from || !to) {
+          return "";
+        }
+
+        const isActive = motion && motion.from === edge.from && motion.to === edge.to;
+        const classes = ["architecture-edge", `is-${edge.kind}`];
+        if (isActive) {
+          classes.push("is-active");
+        }
+
+        return `<path class="${classes.join(" ")}" d="${edgePath(from, to)}" marker-end="url(#architectureArrow${isActive ? "Active" : ""})" />`;
+      })
+      .join("");
+
+    architectureEdges.innerHTML = `
+      <defs>
+        <marker id="architectureArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#9aa7b0"></path>
+        </marker>
+        <marker id="architectureArrowActive" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#157f56"></path>
+        </marker>
+      </defs>
+      ${paths}
+    `;
   }
 
   function centerWithinStage(element) {
@@ -1342,12 +1507,12 @@
     };
   }
 
-  function motionEndpoint(kind, buffer) {
-    if (kind === "memory") {
-      return memoryNode;
+  function motionEndpoint(endpoint, buffer) {
+    if (endpoint === "buffer") {
+      return getBufferCard(buffer);
     }
 
-    return getBufferCard(buffer);
+    return getArchitectureNode(endpoint);
   }
 
   function animateChunkMotion(motion) {
@@ -1433,6 +1598,7 @@
   function renderTraceFrame(frame, animate) {
     if (!frame) {
       renderBufferCards(null);
+      drawArchitectureEdges(null);
       traceTimeLabel.textContent = "0.000s";
       traceEventLabel.textContent = "No trace";
       setBlocklyHighlight(null);
@@ -1441,6 +1607,7 @@
     }
 
     renderBufferCards(frame);
+    drawArchitectureEdges(frame);
     traceTimeLabel.textContent = traceSecondsLabel(frame.time);
     traceEventLabel.textContent = frame.event ? frame.event.label : "Trace start";
     setBlocklyHighlight(frame.activeBlockId);
@@ -1514,6 +1681,7 @@
     traceFrameIndex = 0;
     chunkToken.classList.remove("is-visible");
     renderBufferCards(null);
+    drawArchitectureEdges(null);
     traceTimeLabel.textContent = "0.000s";
     traceEventLabel.textContent = message;
     traceSlider.max = "0";
@@ -1709,7 +1877,10 @@
     resetTraceVisualizer("No trace");
   });
 
-  window.addEventListener("resize", () => Blockly.svgResize(workspace));
+  window.addEventListener("resize", () => {
+    Blockly.svgResize(workspace);
+    drawArchitectureEdges(traceFrames[traceFrameIndex] || null);
+  });
   resetTraceVisualizer();
   restoreWorkspace();
 })();
