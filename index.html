@@ -41,7 +41,7 @@
       <section class="workspace-shell" aria-label="Blockly workspace">
         <div id="blocklyDiv"></div>
       </section>
-      <aside class="code-shell" aria-label="Generated ACT-R Lisp and run output">
+      <aside class="code-shell" aria-label="Generated ACT-R Lisp, run output, and trace visualizer">
         <div class="code-header">
           <h2>ACT-R Lisp</h2>
           <span id="statusText" role="status" aria-live="polite">Ready</span>
@@ -52,6 +52,41 @@
           <span id="runStatusText" role="status" aria-live="polite">Idle</span>
         </div>
         <pre id="runOutput" tabindex="0"></pre>
+        <div class="visualizer-header">
+          <h2>Trace Visualizer</h2>
+          <div class="visualizer-controls" aria-label="Trace playback controls">
+            <button id="traceBackButton" type="button" title="Previous trace event" aria-label="Previous trace event">
+              <span aria-hidden="true">Prev</span>
+            </button>
+            <button id="tracePlayButton" type="button" title="Play trace" aria-label="Play trace">
+              <span aria-hidden="true">Play</span>
+            </button>
+            <button id="traceForwardButton" type="button" title="Next trace event" aria-label="Next trace event">
+              <span aria-hidden="true">Next</span>
+            </button>
+            <label class="trace-speed">
+              <span>Speed</span>
+              <select id="traceSpeedSelect" aria-label="Trace playback speed">
+                <option value="1">1x</option>
+                <option value="2" selected>2x</option>
+                <option value="5">5x</option>
+                <option value="10">10x</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <section id="traceVisualizer" class="trace-visualizer" aria-label="ACT-R buffer trace visualizer">
+          <div class="trace-meter">
+            <output id="traceTimeLabel">0.000s</output>
+            <input id="traceSlider" type="range" min="0" max="0" value="0" aria-label="Trace event" />
+          </div>
+          <div id="visualizerStage" class="visualizer-stage" aria-live="polite">
+            <div id="memoryNode" class="memory-node">Declarative memory</div>
+            <div id="bufferGrid" class="buffer-grid"></div>
+            <div id="chunkToken" class="chunk-token" aria-hidden="true"></div>
+          </div>
+          <div id="traceEventLabel" class="trace-event-label">No trace</div>
+        </section>
       </aside>
     </main>
 

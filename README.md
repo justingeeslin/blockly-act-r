@@ -20,6 +20,8 @@ Use the green **Run** button to evaluate the generated Lisp with the ACT-R runne
 
 The runner requires a public `http` or `https` `model_url`, so the app encodes the current Lisp into a fetchable HTTPS base64 payload URL and posts that URL as JSON. If the model contains a `(run N)` form, `N` is sent as `run_seconds`; otherwise the app uses 5 seconds.
 
+When the runner returns a timed trace, the Trace Visualizer replays buffer changes using the trace timestamps. Production firings and buffer actions are linked back to the current Blockly workspace, so the relevant production, condition, request, update, or clear block is highlighted during playback.
+
 ## Included Blocks
 
 - ACT-R model forms: `define-model`, `sgp`, `goal-focus`, `run`, raw Lisp.

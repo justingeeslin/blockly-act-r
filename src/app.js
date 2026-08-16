@@ -457,10 +457,38 @@
   const runOutput = document.getElementById("runOutput");
   const runStatusText = document.getElementById("runStatusText");
   const loadInput = document.getElementById("loadInput");
+  const traceBackButton = document.getElementById("traceBackButton");
+  const tracePlayButton = document.getElementById("tracePlayButton");
+  const traceForwardButton = document.getElementById("traceForwardButton");
+  const traceSpeedSelect = document.getElementById("traceSpeedSelect");
+  const traceSlider = document.getElementById("traceSlider");
+  const traceTimeLabel = document.getElementById("traceTimeLabel");
+  const traceEventLabel = document.getElementById("traceEventLabel");
+  const visualizerStage = document.getElementById("visualizerStage");
+  const memoryNode = document.getElementById("memoryNode");
+  const bufferGrid = document.getElementById("bufferGrid");
+  const chunkToken = document.getElementById("chunkToken");
   const storageKey = "blockly-act-r-workspace";
   const runnerEndpoint = "https://act-r-2649d1971396.herokuapp.com/run-model";
   const generatedModelUrlBase = "https://httpbingo.org/base64/";
   const defaultRunSeconds = 5;
+  const defaultBuffers = [
+    "goal",
+    "retrieval",
+    "imaginal",
+    "visual-location",
+    "visual",
+    "manual",
+    "vocal",
+    "aural",
+    "temporal",
+  ];
+  let traceFrames = [];
+  let traceFrameIndex = 0;
+  let tracePlaybackTimer = null;
+  let traceMotionTimer = null;
+  let traceIsPlaying = false;
+  let activeHighlightId = null;
 
   function setStatus(text) {
     statusText.textContent = text;
@@ -510,8 +538,28 @@
     return Number.isFinite(value) ? `${Number(value.toFixed(3))}s` : "";
   }
 
+  function getTraceText(result) {
+    if (!result) {
+      return "";
+    }
+
+    for (const key of ["trace", "stack_trace", "stackTrace", "stack"]) {
+      if (typeof result[key] === "string" && result[key].trim()) {
+        return result[key];
+      }
+
+      if (Array.isArray(result[key]) && result[key].length) {
+        return result[key].join("\n");
+      }
+    }
+
+    return "";
+  }
+
   function formatRunResult(result, codeLength) {
     const lines = [];
+    const traceText = getTraceText(result);
+
     lines.push(`Run ID: ${result.run_id || "unknown"}`);
 
     if (result.current_model) {
@@ -536,8 +584,8 @@
       lines.push(`Run result: ${JSON.stringify(result.run_result)}`);
     }
 
-    if (result.trace) {
-      lines.push("", "Trace:", result.trace.trimEnd());
+    if (traceText) {
+      lines.push("", "Trace:", traceText.trimEnd());
     } else {
       lines.push("", "Response:", JSON.stringify(result, null, 2));
     }
@@ -548,6 +596,949 @@
   function formatRunError(error, result) {
     const details = result ? JSON.stringify(result, null, 2) : "";
     return [`; Run failed: ${error.message}`, details].filter(Boolean).join("\n\n");
+  }
+
+  function traceSecondsLabel(value) {
+    return Number.isFinite(value) ? `${value.toFixed(3)}s` : "0.000s";
+  }
+
+  function cleanActrSymbol(value, fallback = "") {
+    const helper = window.ACTRGeneratorHelpers && window.ACTRGeneratorHelpers.cleanSymbol;
+    const cleaned = helper
+      ? helper(value, fallback)
+      : String(value || "")
+          .trim()
+          .replace(/\s+/g, "-")
+          .replace(/[()"';]/g, "");
+
+    return String(cleaned || fallback)
+      .replace(/[>,]/g, "")
+      .trim();
+  }
+
+  function normalizeTraceKey(value, fallback = "") {
+    return cleanActrSymbol(value, fallback).toLowerCase();
+  }
+
+  function normalizeBufferName(value) {
+    return normalizeTraceKey(value, "goal").replace(/^[+=?-]+/, "").replace(/>$/, "");
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function collectStatementChain(startBlock) {
+    const blocks = [];
+    const seen = new Set();
+    let current = startBlock;
+
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      blocks.push(current);
+      current = current.nextConnection && current.nextConnection.targetBlock();
+    }
+
+    return blocks;
+  }
+
+  function generatedValueForBlock(block) {
+    if (!block) {
+      return "";
+    }
+
+    try {
+      const code = window.ACTRLisp.blockToCode(block);
+      const text = Array.isArray(code) ? code[0] : code;
+      return String(text || "").trim().replace(/\s+/g, " ");
+    } catch (error) {
+      return cleanActrSymbol(block.getFieldValue("VALUE") || block.getFieldValue("NAME"), "");
+    }
+  }
+
+  function readSlotValues(block) {
+    const slots = {};
+    const slotBlocks = collectStatementChain(block.getInputTargetBlock("SLOTS"));
+
+    for (const slotBlock of slotBlocks) {
+      if (slotBlock.type !== "actr_slot_value") {
+        continue;
+      }
+
+      const slot = normalizeTraceKey(slotBlock.getFieldValue("SLOT"), "slot");
+      slots[slot] = generatedValueForBlock(slotBlock.getInputTargetBlock("VALUE"));
+    }
+
+    return slots;
+  }
+
+  function cloneChunk(chunk) {
+    if (!chunk) {
+      return null;
+    }
+
+    return {
+      key: chunk.key,
+      name: chunk.name,
+      type: chunk.type,
+      slots: { ...(chunk.slots || {}) },
+      pending: Boolean(chunk.pending),
+    };
+  }
+
+  function cloneBufferStates(buffers) {
+    const copy = {};
+
+    for (const [buffer, chunk] of Object.entries(buffers)) {
+      copy[buffer] = cloneChunk(chunk);
+    }
+
+    return copy;
+  }
+
+  function readBufferDescriptor(block, role) {
+    const descriptor = {
+      blockId: block.id,
+      blockType: block.type,
+      role,
+      op: "",
+      buffer: "",
+      type: "chunk",
+      slots: readSlotValues(block),
+    };
+
+    if (block.type === "actr_buffer_condition") {
+      descriptor.op = "?";
+      descriptor.buffer = normalizeBufferName(block.getFieldValue("BUFFER"));
+      descriptor.type = cleanActrSymbol(block.getFieldValue("TYPE"), "chunk");
+      return descriptor;
+    }
+
+    if (block.type === "actr_buffer_query") {
+      descriptor.op = "?";
+      descriptor.buffer = normalizeBufferName(block.getFieldValue("BUFFER"));
+      return descriptor;
+    }
+
+    if (block.type === "actr_buffer_request") {
+      descriptor.op = "+";
+      descriptor.buffer = normalizeBufferName(block.getFieldValue("BUFFER"));
+      descriptor.type = cleanActrSymbol(block.getFieldValue("TYPE"), "chunk");
+      return descriptor;
+    }
+
+    if (block.type === "actr_buffer_update") {
+      descriptor.op = "=";
+      descriptor.buffer = normalizeBufferName(block.getFieldValue("BUFFER"));
+      return descriptor;
+    }
+
+    if (block.type === "actr_buffer_clear") {
+      descriptor.op = "-";
+      descriptor.buffer = normalizeBufferName(block.getFieldValue("BUFFER"));
+      return descriptor;
+    }
+
+    if (block.type === "actr_buffer_action") {
+      descriptor.op = block.getFieldValue("OP") || "+";
+      descriptor.buffer = normalizeBufferName(block.getFieldValue("BUFFER"));
+      descriptor.type = cleanActrSymbol(block.getFieldValue("TYPE"), "chunk");
+      return descriptor;
+    }
+
+    return null;
+  }
+
+  function buildWorkspaceTraceContext() {
+    const chunks = new Map();
+    const productions = new Map();
+    let goalFocusBlockId = "";
+    let goalFocusChunkKey = "";
+    let goalFocusChunkName = "";
+
+    for (const block of workspace.getAllBlocks(false)) {
+      if (block.type === "actr_chunk") {
+        const name = cleanActrSymbol(block.getFieldValue("NAME"), "chunk");
+        const key = normalizeTraceKey(name);
+        chunks.set(key, {
+          key,
+          name,
+          type: cleanActrSymbol(block.getFieldValue("TYPE"), "chunk"),
+          slots: readSlotValues(block),
+          pending: false,
+        });
+      }
+
+      if (block.type === "actr_goal_focus") {
+        goalFocusBlockId = block.id;
+        goalFocusChunkName = cleanActrSymbol(block.getFieldValue("CHUNK"), "chunk");
+        goalFocusChunkKey = normalizeTraceKey(goalFocusChunkName);
+      }
+
+      if (block.type === "actr_production") {
+        const name = cleanActrSymbol(block.getFieldValue("NAME"), "production");
+        const production = {
+          key: normalizeTraceKey(name),
+          name,
+          blockId: block.id,
+          actions: [],
+          conditions: [],
+        };
+
+        for (const conditionBlock of collectStatementChain(block.getInputTargetBlock("CONDITIONS"))) {
+          const descriptor = readBufferDescriptor(conditionBlock, "condition");
+          if (descriptor && descriptor.buffer) {
+            production.conditions.push(descriptor);
+          }
+        }
+
+        for (const actionBlock of collectStatementChain(block.getInputTargetBlock("ACTIONS"))) {
+          const descriptor = readBufferDescriptor(actionBlock, "action");
+          if (descriptor && descriptor.buffer) {
+            production.actions.push(descriptor);
+          }
+        }
+
+        productions.set(production.key, production);
+      }
+    }
+
+    return {
+      chunks,
+      productions,
+      goalFocusBlockId,
+      goalFocusChunkKey,
+      goalFocusChunkName,
+    };
+  }
+
+  function parseTimedTraceLine(line, lineNumber) {
+    const match = line.match(/^\s*([0-9]+(?:\.[0-9]+)?)\s+(\S+)\s+(.*?)\s*$/);
+    if (!match) {
+      return null;
+    }
+
+    const time = Number(match[1]);
+    if (!Number.isFinite(time)) {
+      return null;
+    }
+
+    const source = normalizeTraceKey(match[2]);
+    const detail = match[3].trim();
+    const base = {
+      time,
+      source,
+      detail,
+      raw: line.trim(),
+      lineNumber,
+      kind: "trace",
+      buffer: "",
+      chunk: "",
+      production: "",
+      blockId: "",
+      label: detail,
+      motion: null,
+    };
+
+    let detailMatch = detail.match(/\bPRODUCTION-(FIRED|SELECTED)\s+([^\s()]+)/i);
+    if (detailMatch) {
+      return {
+        ...base,
+        kind: "production",
+        phase: detailMatch[1].toLowerCase(),
+        production: normalizeTraceKey(detailMatch[2]),
+        productionName: normalizeTraceKey(detailMatch[2]),
+      };
+    }
+
+    detailMatch = detail.match(/\bSET-BUFFER-CHUNK\s+([^\s()]+)\s+([^\s()]+)/i);
+    if (detailMatch) {
+      return {
+        ...base,
+        kind: "buffer-set",
+        buffer: normalizeBufferName(detailMatch[1]),
+        chunk: normalizeTraceKey(detailMatch[2]),
+        chunkName: normalizeTraceKey(detailMatch[2]),
+      };
+    }
+
+    detailMatch = detail.match(/\bMOD-BUFFER-CHUNK\s+([^\s()]+)/i);
+    if (detailMatch) {
+      return {
+        ...base,
+        kind: "buffer-modify",
+        buffer: normalizeBufferName(detailMatch[1]),
+      };
+    }
+
+    detailMatch = detail.match(/\bCLEAR-BUFFER\s+([^\s()]+)/i);
+    if (detailMatch) {
+      return {
+        ...base,
+        kind: "buffer-clear",
+        buffer: normalizeBufferName(detailMatch[1]),
+      };
+    }
+
+    detailMatch = detail.match(/\bBUFFER-READ-ACTION\s+([^\s()]+)/i);
+    if (detailMatch) {
+      return {
+        ...base,
+        kind: "buffer-read",
+        buffer: normalizeBufferName(detailMatch[1]),
+      };
+    }
+
+    detailMatch = detail.match(/\bQUERY-BUFFER-ACTION\s+([^\s()]+)/i);
+    if (detailMatch) {
+      return {
+        ...base,
+        kind: "buffer-query",
+        buffer: normalizeBufferName(detailMatch[1]),
+      };
+    }
+
+    detailMatch = detail.match(/\bRETRIEVED-CHUNK\s+([^\s()]+)/i);
+    if (detailMatch) {
+      return {
+        ...base,
+        kind: "chunk-retrieved",
+        buffer: "retrieval",
+        chunk: normalizeTraceKey(detailMatch[1]),
+        chunkName: normalizeTraceKey(detailMatch[1]),
+      };
+    }
+
+    if (/\bSTART-RETRIEVAL\b/i.test(detail) || /\bRETRIEVAL-REQUEST\b/i.test(detail)) {
+      return {
+        ...base,
+        kind: "buffer-request",
+        buffer: "retrieval",
+      };
+    }
+
+    return base;
+  }
+
+  function parseTraceEvents(traceText) {
+    return String(traceText || "")
+      .split(/\r?\n/)
+      .map((line, index) => parseTimedTraceLine(line, index))
+      .filter(Boolean)
+      .sort((a, b) => a.time - b.time || a.lineNumber - b.lineNumber);
+  }
+
+  function isVariableValue(value) {
+    return /^=[^\s]+$/.test(String(value || ""));
+  }
+
+  function resolveSlotValue(value, bindings) {
+    const key = normalizeTraceKey(value);
+    return isVariableValue(value) && bindings[key] ? bindings[key] : value;
+  }
+
+  function resolveSlotValues(slots, bindings) {
+    const resolved = {};
+
+    for (const [slot, value] of Object.entries(slots || {})) {
+      resolved[slot] = resolveSlotValue(value, bindings);
+    }
+
+    return resolved;
+  }
+
+  function valuesMatch(expected, actual) {
+    if (isVariableValue(expected)) {
+      return true;
+    }
+
+    return normalizeTraceKey(expected) === normalizeTraceKey(actual);
+  }
+
+  function inferProductionBindings(production, buffers) {
+    const bindings = {};
+
+    if (!production) {
+      return bindings;
+    }
+
+    for (const condition of production.conditions) {
+      const chunk = buffers[condition.buffer];
+      if (!chunk) {
+        continue;
+      }
+
+      for (const [slot, expected] of Object.entries(condition.slots || {})) {
+        if (isVariableValue(expected) && chunk.slots && chunk.slots[slot] !== undefined) {
+          bindings[normalizeTraceKey(expected)] = chunk.slots[slot];
+        }
+      }
+    }
+
+    return bindings;
+  }
+
+  function findMatchingChunk(context, type, slots) {
+    const typeKey = normalizeTraceKey(type);
+    const slotEntries = Object.entries(slots || {});
+
+    if (!slotEntries.length) {
+      return null;
+    }
+
+    for (const chunk of context.chunks.values()) {
+      if (typeKey && normalizeTraceKey(chunk.type) !== typeKey) {
+        continue;
+      }
+
+      const matchesSlots = slotEntries.every(([slot, value]) => {
+        if (!value || isVariableValue(value)) {
+          return false;
+        }
+
+        return chunk.slots && chunk.slots[slot] !== undefined && valuesMatch(value, chunk.slots[slot]);
+      });
+
+      if (matchesSlots) {
+        return chunk;
+      }
+    }
+
+    return null;
+  }
+
+  function findBufferAction(production, op, buffer) {
+    if (!production) {
+      return null;
+    }
+
+    const bufferKey = normalizeBufferName(buffer);
+    const candidates = production.actions.filter((action) => action.buffer === bufferKey);
+
+    if (op === "-") {
+      return candidates.find((action) => action.op === "-") || candidates.find((action) => action.op === "+") || null;
+    }
+
+    return candidates.find((action) => action.op === op) || candidates[0] || null;
+  }
+
+  function findBufferCondition(production, buffer) {
+    if (!production) {
+      return null;
+    }
+
+    const bufferKey = normalizeBufferName(buffer);
+    return production.conditions.find((condition) => condition.buffer === bufferKey) || null;
+  }
+
+  function resolveTraceBlockId(event, context, activeProductionKey) {
+    const productionKey = event.production || activeProductionKey;
+    const production = context.productions.get(productionKey);
+
+    if (event.kind === "production") {
+      return production ? production.blockId : "";
+    }
+
+    if (event.kind === "buffer-read" || event.kind === "buffer-query") {
+      const condition = findBufferCondition(production, event.buffer);
+      return condition ? condition.blockId : production && production.blockId;
+    }
+
+    if (event.kind === "buffer-modify") {
+      const action = findBufferAction(production, "=", event.buffer);
+      return action ? action.blockId : production && production.blockId;
+    }
+
+    if (event.kind === "buffer-request" || event.kind === "chunk-retrieved") {
+      const action = findBufferAction(production, "+", event.buffer);
+      return action ? action.blockId : production && production.blockId;
+    }
+
+    if (event.kind === "buffer-clear") {
+      const action = findBufferAction(production, "-", event.buffer);
+      return action ? action.blockId : production && production.blockId;
+    }
+
+    if (event.kind === "buffer-set") {
+      const action = findBufferAction(production, "+", event.buffer) || findBufferAction(production, "=", event.buffer);
+      if (action) {
+        return action.blockId;
+      }
+
+      if (event.buffer === "goal" && context.goalFocusBlockId) {
+        return context.goalFocusBlockId;
+      }
+    }
+
+    return production ? production.blockId : "";
+  }
+
+  function formatTraceEventLabel(event, context, activeProductionKey) {
+    const productionKey = event.production || activeProductionKey;
+    const production = context.productions.get(productionKey);
+    const productionName = production ? production.name : productionKey;
+    const chunk = event.chunk && context.chunks.get(event.chunk);
+    const chunkName = chunk ? chunk.name : event.chunkName || event.chunk;
+
+    if (event.kind === "production") {
+      const namedProduction = context.productions.get(event.production);
+      return `${traceSecondsLabel(event.time)} - ${namedProduction ? namedProduction.name : productionName} ${event.phase}`;
+    }
+
+    if (event.kind === "buffer-set") {
+      return `${traceSecondsLabel(event.time)} - ${event.buffer} buffer gets ${chunkName || "chunk"}`;
+    }
+
+    if (event.kind === "buffer-clear") {
+      return `${traceSecondsLabel(event.time)} - ${event.buffer} buffer cleared`;
+    }
+
+    if (event.kind === "buffer-modify") {
+      return `${traceSecondsLabel(event.time)} - ${event.buffer} buffer modified by ${productionName || "production"}`;
+    }
+
+    if (event.kind === "buffer-request") {
+      return `${traceSecondsLabel(event.time)} - ${event.buffer} request started`;
+    }
+
+    if (event.kind === "chunk-retrieved") {
+      return `${traceSecondsLabel(event.time)} - retrieved ${chunkName || "chunk"}`;
+    }
+
+    if (event.kind === "buffer-read" || event.kind === "buffer-query") {
+      return `${traceSecondsLabel(event.time)} - ${event.buffer} buffer checked`;
+    }
+
+    return `${traceSecondsLabel(event.time)} - ${event.detail}`;
+  }
+
+  function applyTraceEventToBuffers(event, buffers, context, activeProductionKey, bindings) {
+    const production = context.productions.get(activeProductionKey);
+
+    if (event.kind === "buffer-set") {
+      const catalogChunk = event.chunk && context.chunks.get(event.chunk);
+      const nextChunk =
+        catalogChunk ||
+        (event.chunk && event.chunk !== "nil"
+          ? {
+              key: event.chunk,
+              name: event.chunkName || event.chunk,
+              type: "chunk",
+              slots: {},
+              pending: false,
+            }
+          : null);
+
+      event.motion = nextChunk
+        ? {
+            from: "memory",
+            to: "buffer",
+            buffer: event.buffer,
+            label: nextChunk.name,
+          }
+        : null;
+      buffers[event.buffer] = cloneChunk(nextChunk);
+      return;
+    }
+
+    if (event.kind === "buffer-clear") {
+      const currentChunk = buffers[event.buffer];
+      event.motion = currentChunk
+        ? {
+            from: "buffer",
+            to: "memory",
+            buffer: event.buffer,
+            label: currentChunk.name,
+          }
+        : null;
+      buffers[event.buffer] = null;
+      return;
+    }
+
+    if (event.kind === "buffer-modify") {
+      const action = findBufferAction(production, "=", event.buffer);
+      const currentChunk = cloneChunk(buffers[event.buffer]) || {
+        key: `${event.buffer}-chunk`,
+        name: `${event.buffer}-chunk`,
+        type: action ? action.type : "chunk",
+        slots: {},
+        pending: false,
+      };
+      const slots = action ? resolveSlotValues(action.slots, bindings) : {};
+
+      buffers[event.buffer] = {
+        ...currentChunk,
+        pending: false,
+        slots: {
+          ...(currentChunk.slots || {}),
+          ...slots,
+        },
+      };
+      event.motion = {
+        from: "buffer",
+        to: "buffer",
+        buffer: event.buffer,
+        label: buffers[event.buffer].name,
+      };
+      return;
+    }
+
+    if (event.kind === "buffer-request") {
+      const action = findBufferAction(production, "+", event.buffer);
+      const slots = action ? resolveSlotValues(action.slots, bindings) : {};
+      const requestedChunk = action ? findMatchingChunk(context, action.type, slots) : null;
+
+      buffers[event.buffer] = {
+        key: requestedChunk ? requestedChunk.key : `${event.buffer}-request`,
+        name: requestedChunk ? requestedChunk.name : "requesting",
+        type: action ? action.type : "request",
+        slots,
+        pending: true,
+      };
+      event.motion = {
+        from: "buffer",
+        to: "memory",
+        buffer: event.buffer,
+        label: requestedChunk ? requestedChunk.name : "request",
+      };
+    }
+  }
+
+  function buildTraceFrames(events, context) {
+    const bufferOrder = new Set(defaultBuffers);
+    for (const event of events) {
+      if (event.buffer) {
+        bufferOrder.add(event.buffer);
+      }
+    }
+
+    const buffers = {};
+    for (const buffer of bufferOrder) {
+      buffers[buffer] = null;
+    }
+
+    if (context.goalFocusChunkKey) {
+      buffers.goal =
+        cloneChunk(context.chunks.get(context.goalFocusChunkKey)) ||
+        cloneChunk({
+          key: context.goalFocusChunkKey,
+          name: context.goalFocusChunkName,
+          type: "chunk",
+          slots: {},
+        });
+    }
+
+    const frames = [
+      {
+        index: 0,
+        time: events[0] ? events[0].time : 0,
+        event: null,
+        buffers: cloneBufferStates(buffers),
+        bufferOrder: [...bufferOrder],
+        activeBlockId: null,
+        activeBuffer: "",
+      },
+    ];
+    let activeProductionKey = "";
+    let activeBindings = {};
+
+    events.forEach((sourceEvent, index) => {
+      const event = { ...sourceEvent };
+
+      if (event.kind === "production") {
+        activeProductionKey = event.production;
+        activeBindings = inferProductionBindings(context.productions.get(activeProductionKey), buffers);
+      }
+
+      event.blockId = resolveTraceBlockId(event, context, activeProductionKey) || "";
+      applyTraceEventToBuffers(event, buffers, context, activeProductionKey, activeBindings);
+      event.label = formatTraceEventLabel(event, context, activeProductionKey);
+
+      frames.push({
+        index: index + 1,
+        time: event.time,
+        event,
+        buffers: cloneBufferStates(buffers),
+        bufferOrder: [...bufferOrder],
+        activeBlockId: event.blockId,
+        activeBuffer: event.buffer,
+      });
+    });
+
+    return frames;
+  }
+
+  function formatSlotRows(chunk) {
+    if (!chunk) {
+      return "";
+    }
+
+    const rows = [];
+    if (chunk.type) {
+      rows.push(["isa", chunk.type]);
+    }
+
+    for (const [slot, value] of Object.entries(chunk.slots || {})) {
+      rows.push([slot, value]);
+    }
+
+    const visibleRows = rows.slice(0, 4).map(
+      ([slot, value]) =>
+        `<div class="slot-row" title="${escapeHtml(`${slot} ${value}`)}">${escapeHtml(slot)} ${escapeHtml(value)}</div>`,
+    );
+
+    if (rows.length > visibleRows.length) {
+      visibleRows.push(`<div class="slot-row">${rows.length - visibleRows.length} more slots</div>`);
+    }
+
+    return visibleRows.join("");
+  }
+
+  function renderBufferCards(frame) {
+    const order = frame ? frame.bufferOrder : defaultBuffers;
+    const buffers = frame ? frame.buffers : {};
+    const activeBuffer = frame ? frame.activeBuffer : "";
+
+    bufferGrid.innerHTML = order
+      .map((buffer) => {
+        const chunk = buffers[buffer];
+        const classes = ["buffer-card"];
+        if (!chunk) {
+          classes.push("is-empty");
+        }
+        if (chunk && chunk.pending) {
+          classes.push("is-pending");
+        }
+        if (buffer === activeBuffer) {
+          classes.push("is-active");
+        }
+
+        const chunkName = chunk ? (chunk.pending ? `requesting ${chunk.type}` : chunk.name) : "empty";
+        return `
+          <article class="${classes.join(" ")}" data-buffer="${escapeHtml(buffer)}">
+            <span class="buffer-name" title="${escapeHtml(buffer)}">${escapeHtml(buffer)}</span>
+            <span class="chunk-name" title="${escapeHtml(chunkName)}">${escapeHtml(chunkName)}</span>
+            <div class="slot-list">${formatSlotRows(chunk)}</div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function getBufferCard(buffer) {
+    return [...bufferGrid.querySelectorAll(".buffer-card")].find((card) => card.dataset.buffer === buffer);
+  }
+
+  function centerWithinStage(element) {
+    const stageRect = visualizerStage.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+    return {
+      x: elementRect.left - stageRect.left + elementRect.width / 2,
+      y: elementRect.top - stageRect.top + elementRect.height / 2,
+    };
+  }
+
+  function motionEndpoint(kind, buffer) {
+    if (kind === "memory") {
+      return memoryNode;
+    }
+
+    return getBufferCard(buffer);
+  }
+
+  function animateChunkMotion(motion) {
+    const fromElement = motionEndpoint(motion.from, motion.buffer);
+    const toElement = motionEndpoint(motion.to, motion.buffer);
+
+    if (!fromElement || !toElement) {
+      return;
+    }
+
+    clearTimeout(traceMotionTimer);
+    chunkToken.textContent = motion.label || "chunk";
+    chunkToken.classList.remove("is-visible");
+    chunkToken.style.transition = "none";
+
+    const tokenWidth = chunkToken.offsetWidth || 84;
+    const tokenHeight = chunkToken.offsetHeight || 30;
+    const from = centerWithinStage(fromElement);
+    const to = centerWithinStage(toElement);
+    const fromX = Math.max(0, from.x - tokenWidth / 2);
+    const fromY = Math.max(0, from.y - tokenHeight / 2);
+    const toX = Math.max(0, to.x - tokenWidth / 2);
+    const toY = Math.max(0, to.y - tokenHeight / 2);
+
+    chunkToken.style.transform = `translate(${fromX}px, ${fromY}px) scale(0.95)`;
+    chunkToken.classList.add("is-visible");
+    chunkToken.offsetWidth;
+    chunkToken.style.transition = "";
+
+    requestAnimationFrame(() => {
+      const scale = fromX === toX && fromY === toY ? 1.08 : 1;
+      chunkToken.style.transform = `translate(${toX}px, ${toY}px) scale(${scale})`;
+    });
+
+    traceMotionTimer = setTimeout(() => {
+      chunkToken.classList.remove("is-visible");
+    }, 620);
+  }
+
+  function setBlocklyHighlight(blockId) {
+    if (activeHighlightId && activeHighlightId !== blockId) {
+      const previousBlock = workspace.getBlockById(activeHighlightId);
+      const previousRoot = previousBlock && previousBlock.getSvgRoot && previousBlock.getSvgRoot();
+      if (previousRoot) {
+        previousRoot.classList.remove("actr-running-block");
+      }
+    }
+
+    try {
+      if (typeof workspace.highlightBlock === "function") {
+        workspace.highlightBlock(blockId || null);
+      }
+    } catch (error) {
+      // The CSS class below keeps playback useful if a Blockly build lacks highlightBlock.
+    }
+
+    if (blockId) {
+      const block = workspace.getBlockById(blockId);
+      const root = block && block.getSvgRoot && block.getSvgRoot();
+      if (root) {
+        root.classList.add("actr-running-block");
+      }
+    }
+
+    activeHighlightId = blockId || null;
+  }
+
+  function updateTraceControls() {
+    const hasFrames = traceFrames.length > 1;
+    traceBackButton.disabled = !hasFrames || traceFrameIndex <= 0;
+    traceForwardButton.disabled = !hasFrames || traceFrameIndex >= traceFrames.length - 1;
+    tracePlayButton.disabled = !hasFrames;
+    traceSlider.disabled = !hasFrames;
+    traceSlider.max = String(Math.max(traceFrames.length - 1, 0));
+    traceSlider.value = String(traceFrameIndex);
+
+    const label = traceIsPlaying ? "Pause" : "Play";
+    tracePlayButton.querySelector("span").textContent = label;
+    tracePlayButton.setAttribute("aria-label", `${label} trace`);
+    tracePlayButton.setAttribute("title", `${label} trace`);
+  }
+
+  function renderTraceFrame(frame, animate) {
+    if (!frame) {
+      renderBufferCards(null);
+      traceTimeLabel.textContent = "0.000s";
+      traceEventLabel.textContent = "No trace";
+      setBlocklyHighlight(null);
+      updateTraceControls();
+      return;
+    }
+
+    renderBufferCards(frame);
+    traceTimeLabel.textContent = traceSecondsLabel(frame.time);
+    traceEventLabel.textContent = frame.event ? frame.event.label : "Trace start";
+    setBlocklyHighlight(frame.activeBlockId);
+    updateTraceControls();
+
+    if (animate && frame.event && frame.event.motion) {
+      requestAnimationFrame(() => animateChunkMotion(frame.event.motion));
+    }
+  }
+
+  function setTraceFrame(index, animate = false) {
+    if (!traceFrames.length) {
+      return;
+    }
+
+    traceFrameIndex = Math.max(0, Math.min(traceFrames.length - 1, Number(index) || 0));
+    renderTraceFrame(traceFrames[traceFrameIndex], animate);
+  }
+
+  function stopTracePlayback() {
+    clearTimeout(tracePlaybackTimer);
+    tracePlaybackTimer = null;
+    traceIsPlaying = false;
+    updateTraceControls();
+  }
+
+  function scheduleNextTraceFrame() {
+    clearTimeout(tracePlaybackTimer);
+
+    if (!traceIsPlaying) {
+      return;
+    }
+
+    if (traceFrameIndex >= traceFrames.length - 1) {
+      stopTracePlayback();
+      return;
+    }
+
+    const currentFrame = traceFrames[traceFrameIndex];
+    const nextFrame = traceFrames[traceFrameIndex + 1];
+    const speed = Number(traceSpeedSelect.value) || 1;
+    const delay = Math.max(220, ((nextFrame.time - currentFrame.time) * 1000) / speed);
+
+    tracePlaybackTimer = setTimeout(() => {
+      setTraceFrame(traceFrameIndex + 1, true);
+      scheduleNextTraceFrame();
+    }, delay);
+  }
+
+  function playTrace() {
+    if (traceFrames.length <= 1) {
+      return;
+    }
+
+    if (traceFrameIndex >= traceFrames.length - 1) {
+      setTraceFrame(0, false);
+    }
+
+    traceIsPlaying = true;
+    updateTraceControls();
+    scheduleNextTraceFrame();
+  }
+
+  function resetTraceVisualizer(message = "No trace") {
+    clearTimeout(tracePlaybackTimer);
+    clearTimeout(traceMotionTimer);
+    tracePlaybackTimer = null;
+    traceMotionTimer = null;
+    traceIsPlaying = false;
+    traceFrames = [];
+    traceFrameIndex = 0;
+    chunkToken.classList.remove("is-visible");
+    renderBufferCards(null);
+    traceTimeLabel.textContent = "0.000s";
+    traceEventLabel.textContent = message;
+    traceSlider.max = "0";
+    traceSlider.value = "0";
+    setBlocklyHighlight(null);
+    updateTraceControls();
+  }
+
+  function loadTraceVisualizer(traceText) {
+    const events = parseTraceEvents(traceText);
+
+    if (!events.length) {
+      resetTraceVisualizer(traceText ? "No timed trace events" : "No trace");
+      return false;
+    }
+
+    const context = buildWorkspaceTraceContext();
+    clearTimeout(tracePlaybackTimer);
+    clearTimeout(traceMotionTimer);
+    traceIsPlaying = false;
+    traceFrames = buildTraceFrames(events, context);
+    traceFrameIndex = 0;
+    renderTraceFrame(traceFrames[0], false);
+    playTrace();
+    return true;
   }
 
   async function runModel() {
@@ -565,6 +1556,7 @@
     runButton.setAttribute("aria-busy", "true");
     setRunStatus("Running");
     runOutput.textContent = `Submitting model for a ${formatSeconds(runSeconds)} run...`;
+    resetTraceVisualizer("Trace pending");
 
     try {
       const response = await fetch(runnerEndpoint, {
@@ -592,11 +1584,12 @@
         throw runError;
       }
 
-      setRunStatus("Complete");
       runOutput.textContent = formatRunResult(result, code.length);
+      setRunStatus(loadTraceVisualizer(getTraceText(result)) ? "Complete - visualizing" : "Complete");
     } catch (error) {
       setRunStatus("Failed");
       runOutput.textContent = formatRunError(error, error.result);
+      resetTraceVisualizer("No trace");
     } finally {
       runButton.disabled = false;
       runButton.removeAttribute("aria-busy");
@@ -639,6 +1632,35 @@
   }
 
   runButton.addEventListener("click", runModel);
+
+  traceBackButton.addEventListener("click", () => {
+    stopTracePlayback();
+    setTraceFrame(traceFrameIndex - 1, true);
+  });
+
+  tracePlayButton.addEventListener("click", () => {
+    if (traceIsPlaying) {
+      stopTracePlayback();
+    } else {
+      playTrace();
+    }
+  });
+
+  traceForwardButton.addEventListener("click", () => {
+    stopTracePlayback();
+    setTraceFrame(traceFrameIndex + 1, true);
+  });
+
+  traceSlider.addEventListener("input", (event) => {
+    stopTracePlayback();
+    setTraceFrame(Number(event.target.value), true);
+  });
+
+  traceSpeedSelect.addEventListener("change", () => {
+    if (traceIsPlaying) {
+      scheduleNextTraceFrame();
+    }
+  });
 
   document.getElementById("sampleButton").addEventListener("click", () => {
     loadXmlText(sampleXml);
@@ -684,8 +1706,10 @@
       return;
     }
     generateCode();
+    resetTraceVisualizer("No trace");
   });
 
   window.addEventListener("resize", () => Blockly.svgResize(workspace));
+  resetTraceVisualizer();
   restoreWorkspace();
 })();
