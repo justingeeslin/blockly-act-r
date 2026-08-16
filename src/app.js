@@ -467,6 +467,7 @@
   const visualizerStage = document.getElementById("visualizerStage");
   const architectureEdges = document.getElementById("architectureEdges");
   const memoryNode = document.getElementById("memoryNode");
+  const declarativeChunkList = document.getElementById("declarativeChunkList");
   const bufferGrid = document.getElementById("bufferGrid");
   const chunkToken = document.getElementById("chunkToken");
   const storageKey = "blockly-act-r-workspace";
@@ -492,6 +493,7 @@
   let traceMotionTimer = null;
   let traceIsPlaying = false;
   let activeHighlightId = null;
+  let traceContext = null;
 
   function setStatus(text) {
     statusText.textContent = text;
@@ -629,6 +631,11 @@
 
   function bufferNodeId(buffer) {
     return `buffer:${normalizeBufferName(buffer)}`;
+  }
+
+  function declarativeChunkNodeId(chunk) {
+    const key = typeof chunk === "string" ? chunk : chunk && chunk.key;
+    return key ? `declarative-chunk:${normalizeTraceKey(key)}` : "declarative-memory";
   }
 
   function escapeHtml(value) {
@@ -1158,7 +1165,8 @@
       buffers.retrieval = cloneChunk(retrievedChunk);
       event.motion = retrievedChunk
         ? {
-            from: "declarative-memory",
+            from: catalogChunk ? declarativeChunkNodeId(catalogChunk) : "declarative-memory",
+            edgeFrom: "declarative-memory",
             to: bufferNodeId("retrieval"),
             buffer: "retrieval",
             label: retrievedChunk.name,
@@ -1183,7 +1191,8 @@
 
       event.motion = nextChunk
         ? {
-            from: "declarative-memory",
+            from: catalogChunk ? declarativeChunkNodeId(catalogChunk) : "declarative-memory",
+            edgeFrom: "declarative-memory",
             to: bufferNodeId(event.buffer),
             buffer: event.buffer,
             label: nextChunk.name,
@@ -1346,6 +1355,42 @@
     return visibleRows.join("");
   }
 
+  function renderDeclarativeChunks(context, motion) {
+    if (!declarativeChunkList) {
+      return;
+    }
+
+    const chunks = context && context.chunks ? [...context.chunks.values()] : [];
+
+    if (!chunks.length) {
+      declarativeChunkList.innerHTML = `<span class="memory-empty">No chunks</span>`;
+      return;
+    }
+
+    declarativeChunkList.innerHTML = chunks
+      .map((chunk) => {
+        const classes = ["memory-chunk"];
+        const nodeId = declarativeChunkNodeId(chunk);
+        if (motion && motion.from === nodeId) {
+          classes.push("is-active");
+        }
+
+        const slotPreview = Object.entries(chunk.slots || {})
+          .slice(0, 3)
+          .map(([slot, value]) => `${slot} ${value}`)
+          .join(", ");
+        const title = [chunk.name, chunk.type ? `isa ${chunk.type}` : "", slotPreview].filter(Boolean).join(" - ");
+
+        return `
+          <span class="${classes.join(" ")}" data-chunk-key="${escapeHtml(chunk.key)}" title="${escapeHtml(title)}">
+            <span class="memory-chunk-name">${escapeHtml(chunk.name)}</span>
+            <span class="memory-chunk-type">${escapeHtml(chunk.type || "chunk")}</span>
+          </span>
+        `;
+      })
+      .join("");
+  }
+
   function renderBufferCards(frame) {
     const order = frame ? frame.bufferOrder : defaultBuffers;
     const buffers = frame ? frame.buffers : {};
@@ -1403,6 +1448,11 @@
 
     if (nodeId === "memory" || nodeId === "declarative-memory") {
       return memoryNode;
+    }
+
+    if (nodeId.startsWith("declarative-chunk:")) {
+      const chunkKey = nodeId.slice("declarative-chunk:".length);
+      return [...declarativeChunkList.querySelectorAll(".memory-chunk")].find((chunk) => chunk.dataset.chunkKey === chunkKey);
     }
 
     if (nodeId.startsWith("buffer:")) {
@@ -1475,7 +1525,8 @@
           return "";
         }
 
-        const isActive = motion && motion.from === edge.from && motion.to === edge.to;
+        const activeFrom = motion && (motion.edgeFrom || motion.from);
+        const isActive = motion && activeFrom === edge.from && motion.to === edge.to;
         const classes = ["architecture-edge", `is-${edge.kind}`];
         if (isActive) {
           classes.push("is-active");
@@ -1597,6 +1648,7 @@
 
   function renderTraceFrame(frame, animate) {
     if (!frame) {
+      renderDeclarativeChunks(traceContext, null);
       renderBufferCards(null);
       drawArchitectureEdges(null);
       traceTimeLabel.textContent = "0.000s";
@@ -1606,6 +1658,8 @@
       return;
     }
 
+    const motion = frame.event && frame.event.motion;
+    renderDeclarativeChunks(traceContext, motion);
     renderBufferCards(frame);
     drawArchitectureEdges(frame);
     traceTimeLabel.textContent = traceSecondsLabel(frame.time);
@@ -1677,9 +1731,11 @@
     tracePlaybackTimer = null;
     traceMotionTimer = null;
     traceIsPlaying = false;
+    traceContext = buildWorkspaceTraceContext();
     traceFrames = [];
     traceFrameIndex = 0;
     chunkToken.classList.remove("is-visible");
+    renderDeclarativeChunks(traceContext, null);
     renderBufferCards(null);
     drawArchitectureEdges(null);
     traceTimeLabel.textContent = "0.000s";
@@ -1699,6 +1755,7 @@
     }
 
     const context = buildWorkspaceTraceContext();
+    traceContext = context;
     clearTimeout(tracePlaybackTimer);
     clearTimeout(traceMotionTimer);
     traceIsPlaying = false;
@@ -1773,6 +1830,7 @@
     Blockly.svgResize(workspace);
     workspace.scrollCenter();
     generateCode();
+    resetTraceVisualizer("No trace");
   }
 
   function saveWorkspace() {
