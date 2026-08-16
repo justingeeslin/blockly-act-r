@@ -458,5 +458,20 @@
       tooltip: "Insert one raw Lisp expression.",
       helpUrl: "",
     },
+    {
+      type: "actr_raw_value",
+      message0: "raw Lisp value %1",
+      args0: [
+        {
+          type: "field_input",
+          name: "CODE",
+          text: "(+ 1 2)",
+        },
+      ],
+      output: null,
+      colour: ACTR_VALUE,
+      tooltip: "Insert a raw Lisp expression where a value is expected.",
+      helpUrl: "",
+    },
   ]);
 })();

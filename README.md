@@ -14,6 +14,10 @@ Then visit `http://127.0.0.1:5173`.
 
 The app loads Blockly from a pinned CDN and keeps the ACT-R blocks and generator in `src/`.
 
+## Load a Model
+
+Use **Load** to open either a saved Blockly XML workspace or an ACT-R Lisp model file (`.lisp`, `.lsp`, or `.cl`). Lisp imports are converted into editable blocks for supported ACT-R forms; unsupported Lisp is preserved as raw Lisp blocks.
+
 ## Run a Model
 
 Use the green **Run** button to evaluate the generated Lisp with the ACT-R runner at `https://act-r-2649d1971396.herokuapp.com/run-model`.
@@ -27,7 +31,7 @@ When the runner returns a timed trace, the Trace Visualizer replays buffer chang
 - ACT-R model forms: `define-model`, `sgp`, `goal-focus`, `run`, raw Lisp.
 - Declarative memory: `chunk-type`, `add-dm`, chunk definitions, slot values.
 - Productions: production rules, buffer checks, buffer queries, buffer requests, updates, and clears.
-- Values: ACT-R symbols, production variables such as `=item`, `nil`, numbers, strings, booleans.
+- Values: ACT-R symbols, production variables such as `=item`, `nil`, raw Lisp values, numbers, strings, booleans.
 - Basic Blockly blocks: logic, loops, math, text, lists, and variables with Lisp generation.
 
 ## Generated Example

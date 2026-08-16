@@ -80,6 +80,7 @@
           { kind: "block", type: "actr_symbol" },
           { kind: "block", type: "actr_variable" },
           { kind: "block", type: "actr_nil" },
+          { kind: "block", type: "actr_raw_value" },
           {
             kind: "block",
             type: "math_number",
@@ -1845,15 +1846,50 @@
   }
 
   function loadXmlText(xmlText) {
-    workspace.clear();
     const xml = Blockly.Xml.textToDom
       ? Blockly.Xml.textToDom(xmlText)
       : Blockly.utils.xml.textToDom(xmlText);
-    Blockly.Xml.domToWorkspace(xml, workspace);
+
+    if (Blockly.Events && Blockly.Events.disable) {
+      Blockly.Events.disable();
+    }
+
+    try {
+      workspace.clear();
+      Blockly.Xml.domToWorkspace(xml, workspace);
+    } finally {
+      if (Blockly.Events && Blockly.Events.enable) {
+        Blockly.Events.enable();
+      }
+    }
+
     Blockly.svgResize(workspace);
     workspace.scrollCenter();
     generateCode();
     resetTraceVisualizer("No trace");
+  }
+
+  function isXmlWorkspaceText(text, file) {
+    const name = file && file.name ? file.name.toLowerCase() : "";
+    return name.endsWith(".xml") || /^\s*</.test(text);
+  }
+
+  function loadLispText(lispText) {
+    if (!window.ACTRLispImporter) {
+      throw new Error("Lisp importer is not available.");
+    }
+
+    loadXmlText(window.ACTRLispImporter.lispToXmlText(lispText));
+  }
+
+  function loadWorkspaceText(text, file) {
+    if (isXmlWorkspaceText(text, file)) {
+      loadXmlText(text);
+      return "xml";
+    }
+
+    loadLispText(text);
+    return "lisp";
   }
 
   function saveWorkspace() {
@@ -1944,10 +1980,17 @@
     if (!file) {
       return;
     }
-    const text = await file.text();
-    loadXmlText(text);
-    setStatus("Loaded");
-    loadInput.value = "";
+    try {
+      const text = await file.text();
+      const format = loadWorkspaceText(text, file);
+      setStatus(format === "lisp" ? "Lisp imported" : "Loaded");
+    } catch (error) {
+      setStatus("Load failed");
+      setRunStatus("Load failed");
+      runOutput.textContent = `; Load failed: ${error.message}`;
+    } finally {
+      loadInput.value = "";
+    }
   });
 
   workspace.addChangeListener((event) => {

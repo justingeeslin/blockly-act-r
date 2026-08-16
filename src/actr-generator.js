@@ -224,6 +224,11 @@
     return code ? `${code}\n` : "";
   });
 
+  define("actr_raw_value", (block) => {
+    const code = String(block.getFieldValue("CODE") || "").trim();
+    return [code || "nil", generator.ORDER_ATOMIC];
+  });
+
   define("math_number", (block) => [String(Number(block.getFieldValue("NUM"))), generator.ORDER_ATOMIC]);
 
   define("math_arithmetic", (block) => {

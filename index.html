@@ -28,7 +28,7 @@
         <button id="saveButton" type="button" title="Save blocks" aria-label="Save blocks">
           <span aria-hidden="true">Save</span>
         </button>
-        <button id="loadButton" type="button" title="Load blocks" aria-label="Load blocks">
+        <button id="loadButton" type="button" title="Load blocks or Lisp" aria-label="Load blocks or Lisp">
           <span aria-hidden="true">Load</span>
         </button>
         <button id="clearButton" type="button" class="danger" title="Clear workspace" aria-label="Clear workspace">
@@ -105,13 +105,14 @@
       </aside>
     </main>
 
-    <input id="loadInput" type="file" accept=".xml,text/xml" hidden />
+    <input id="loadInput" type="file" accept=".xml,.lisp,.lsp,.cl,text/xml,text/x-common-lisp,text/plain" hidden />
 
     <script src="https://unpkg.com/blockly@10.4.3/blockly_compressed.js"></script>
     <script src="https://unpkg.com/blockly@10.4.3/blocks_compressed.js"></script>
     <script src="https://unpkg.com/blockly@10.4.3/msg/en.js"></script>
     <script src="./src/actr-blocks.js"></script>
     <script src="./src/actr-generator.js"></script>
+    <script src="./src/actr-lisp-importer.js"></script>
     <script src="./src/app.js"></script>
   </body>
 </html>
