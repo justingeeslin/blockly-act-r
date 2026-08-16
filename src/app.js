@@ -436,6 +436,92 @@
     </xml>
   `;
 
+  const samples = [
+    {
+      id: "counting",
+      name: "Counting",
+      meta: "Goal and retrieval buffers",
+      xml: sampleXml,
+    },
+    {
+      id: "visual-motor-keypress",
+      name: "Visual motor keypress",
+      meta: "Visual-location, visual, and manual buffers",
+      lisp: `
+        (clear-all)
+
+        (define-model visual-motor-keypress
+          (sgp :v t :trace-detail high :show-focus t)
+          (chunk-type goal state)
+
+          (add-dm
+            (start isa goal
+              state find-letter))
+
+          (goal-focus start)
+
+          (p find-letter
+            =goal>
+              isa goal
+              state find-letter
+            ?visual-location>
+              buffer empty
+          ==>
+            +visual-location>
+              isa visual-location
+              kind text
+              :attended nil
+            =goal>
+              state attend-letter
+          )
+
+          (p attend-letter
+            =goal>
+              isa goal
+              state attend-letter
+            =visual-location>
+              isa visual-location
+            ?visual>
+              state free
+          ==>
+            +visual>
+              isa move-attention
+              screen-pos =visual-location
+            =goal>
+              state press-letter
+          )
+
+          (p press-letter
+            =goal>
+              isa goal
+              state press-letter
+            =visual>
+              isa text
+              value =letter
+            ?manual>
+              state free
+          ==>
+            +manual>
+              isa press-key
+              key =letter
+            =goal>
+              state done
+            !output! (=letter)
+          )
+        )
+
+        (defvar *letter-window* nil)
+        (reset)
+        (setf *letter-window* (open-exp-window "Letter keyboard sample" :visible nil :width 320 :height 220))
+        (add-text-to-exp-window *letter-window* "A" :x 150 :y 95)
+        (install-device *letter-window*)
+        (proc-display)
+        (run 2)
+      `,
+    },
+  ];
+  const defaultSample = samples[0];
+
   const workspace = Blockly.inject("blocklyDiv", {
     toolbox,
     renderer: "zelos",
@@ -469,6 +555,8 @@
   const runButton = document.getElementById("runButton");
   const runOutput = document.getElementById("runOutput");
   const runStatusText = document.getElementById("runStatusText");
+  const sampleButton = document.getElementById("sampleButton");
+  const samplesMenu = document.getElementById("samplesMenu");
   const loadInput = document.getElementById("loadInput");
   const traceBackButton = document.getElementById("traceBackButton");
   const tracePlayButton = document.getElementById("tracePlayButton");
@@ -1904,6 +1992,65 @@
     return "lisp";
   }
 
+  function loadSampleWorkspace(sample) {
+    if (sample.xml) {
+      loadXmlText(sample.xml);
+      return;
+    }
+
+    loadLispText(sample.lisp);
+  }
+
+  function loadSample(sample) {
+    loadSampleWorkspace(sample);
+    setSamplesMenuOpen(false);
+    setStatus(`${sample.name} sample loaded`);
+    sampleButton.focus();
+  }
+
+  function setSamplesMenuOpen(isOpen) {
+    samplesMenu.hidden = !isOpen;
+    sampleButton.setAttribute("aria-expanded", String(isOpen));
+  }
+
+  function getSampleMenuButtons() {
+    return [...samplesMenu.querySelectorAll("button")];
+  }
+
+  function focusSampleMenuButton(offset) {
+    const buttons = getSampleMenuButtons();
+    if (!buttons.length) {
+      return;
+    }
+
+    const currentIndex = buttons.indexOf(document.activeElement);
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + offset + buttons.length) % buttons.length;
+    buttons[nextIndex].focus();
+  }
+
+  function renderSampleMenu() {
+    samplesMenu.textContent = "";
+
+    for (const sample of samples) {
+      const button = document.createElement("button");
+      const title = document.createElement("span");
+      const meta = document.createElement("span");
+
+      button.type = "button";
+      button.setAttribute("role", "menuitem");
+      button.dataset.sampleId = sample.id;
+      button.title = `Load ${sample.name} sample`;
+      title.className = "sample-title";
+      title.textContent = sample.name;
+      meta.className = "sample-meta";
+      meta.textContent = sample.meta;
+
+      button.append(title, meta);
+      button.addEventListener("click", () => loadSample(sample));
+      samplesMenu.append(button);
+    }
+  }
+
   function saveWorkspace() {
     const xml = Blockly.Xml.workspaceToDom(workspace);
     const text = Blockly.Xml.domToPrettyText(xml);
@@ -1913,7 +2060,13 @@
 
   function restoreWorkspace() {
     const saved = localStorage.getItem(storageKey);
-    loadXmlText(saved || sampleXml);
+
+    if (saved) {
+      loadXmlText(saved);
+      return;
+    }
+
+    loadSampleWorkspace(defaultSample);
   }
 
   function download(filename, content, mimeType) {
@@ -1927,6 +2080,8 @@
     link.remove();
     URL.revokeObjectURL(url);
   }
+
+  renderSampleMenu();
 
   runButton.addEventListener("click", runModel);
 
@@ -1959,9 +2114,65 @@
     }
   });
 
-  document.getElementById("sampleButton").addEventListener("click", () => {
-    loadXmlText(sampleXml);
-    setStatus("Sample loaded");
+  sampleButton.addEventListener("click", () => {
+    const nextOpenState = samplesMenu.hidden;
+    setSamplesMenuOpen(nextOpenState);
+
+    if (nextOpenState) {
+      const [firstButton] = getSampleMenuButtons();
+      if (firstButton) {
+        firstButton.focus();
+      }
+    }
+  });
+
+  sampleButton.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown") {
+      return;
+    }
+
+    event.preventDefault();
+    setSamplesMenuOpen(true);
+    focusSampleMenuButton(1);
+  });
+
+  samplesMenu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSamplesMenuOpen(false);
+      sampleButton.focus();
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusSampleMenuButton(1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusSampleMenuButton(-1);
+      return;
+    }
+
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      const buttons = getSampleMenuButtons();
+      const button = event.key === "Home" ? buttons[0] : buttons[buttons.length - 1];
+
+      if (button) {
+        button.focus();
+      }
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (samplesMenu.hidden || sampleButton.contains(event.target) || samplesMenu.contains(event.target)) {
+      return;
+    }
+
+    setSamplesMenuOpen(false);
   });
 
   document.getElementById("copyButton").addEventListener("click", async () => {

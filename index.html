@@ -16,9 +16,20 @@
         <button id="runButton" type="button" class="play" title="Run model" aria-label="Run model">
           <span aria-hidden="true">Run</span>
         </button>
-        <button id="sampleButton" type="button" title="Load sample model" aria-label="Load sample model">
-          <span aria-hidden="true">Sample</span>
-        </button>
+        <div class="sample-picker">
+          <button
+            id="sampleButton"
+            type="button"
+            title="Show sample models"
+            aria-label="Show sample models"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="samplesMenu"
+          >
+            <span aria-hidden="true">Samples</span>
+          </button>
+          <div id="samplesMenu" class="samples-menu" role="menu" aria-label="Sample models" hidden></div>
+        </div>
         <button id="copyButton" type="button" title="Copy Lisp" aria-label="Copy Lisp">
           <span aria-hidden="true">Copy</span>
         </button>

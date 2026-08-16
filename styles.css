@@ -38,6 +38,8 @@ input {
 }
 
 .app-header {
+  position: relative;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,6 +98,51 @@ h2 {
   color: var(--ink);
   cursor: pointer;
   box-shadow: 0 1px 0 rgba(29, 37, 43, 0.04);
+}
+
+.sample-picker {
+  position: relative;
+}
+
+.samples-menu[hidden] {
+  display: none;
+}
+
+.samples-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.samples-menu button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-height: 0;
+  padding: 10px;
+  border-color: transparent;
+  box-shadow: none;
+  text-align: left;
+}
+
+.sample-title {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.sample-meta {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.25;
 }
 
 .toolbar button.play {
@@ -734,6 +781,11 @@ h2 {
   .toolbar button {
     min-width: 72px;
     padding: 0 10px;
+  }
+
+  .samples-menu {
+    left: 0;
+    right: auto;
   }
 
   .app-layout {
