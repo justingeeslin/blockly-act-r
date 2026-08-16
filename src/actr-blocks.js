@@ -7,6 +7,7 @@
   const ACTR_CHUNK = "#b05d24";
   const ACTR_PRODUCTION = "#2f6f4e";
   const ACTR_BUFFER = "#1d6f7a";
+  const ACTR_ENVIRONMENT = "#5b5fa8";
   const ACTR_VALUE = "#5b6472";
 
   Blockly.common.defineBlocksWithJsonArray([
@@ -417,6 +418,151 @@
       nextStatement: null,
       colour: ACTR_PRODUCTION,
       tooltip: "Print an item or string in the ACT-R model trace with !output!.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_reset",
+      message0: "reset model",
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Reset the current ACT-R model before running a task.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_open_exp_window",
+      message0: "set window %1 to exp window %2 visible %3 width %4 height %5",
+      args0: [
+        {
+          type: "field_input",
+          name: "WINDOW",
+          text: "*window*",
+        },
+        {
+          type: "input_value",
+          name: "TITLE",
+        },
+        {
+          type: "input_value",
+          name: "VISIBLE",
+        },
+        {
+          type: "input_value",
+          name: "WIDTH",
+        },
+        {
+          type: "input_value",
+          name: "HEIGHT",
+        },
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Open an ACT-R experiment window and store it in a Lisp variable.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_add_text_to_exp_window",
+      message0: "add text %1 to window %2 at x %3 y %4",
+      args0: [
+        {
+          type: "input_value",
+          name: "TEXT",
+        },
+        {
+          type: "input_value",
+          name: "WINDOW",
+        },
+        {
+          type: "input_value",
+          name: "X",
+        },
+        {
+          type: "input_value",
+          name: "Y",
+        },
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Display text in the current ACT-R experiment window.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_add_button_to_exp_window",
+      message0: "add button %1 at x %2 y %3 width %4 height %5 action %6",
+      args0: [
+        {
+          type: "input_value",
+          name: "TEXT",
+        },
+        {
+          type: "input_value",
+          name: "X",
+        },
+        {
+          type: "input_value",
+          name: "Y",
+        },
+        {
+          type: "input_value",
+          name: "WIDTH",
+        },
+        {
+          type: "input_value",
+          name: "HEIGHT",
+        },
+        {
+          type: "input_value",
+          name: "ACTION",
+        },
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Display a clickable button in the current ACT-R experiment window.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_clear_exp_window",
+      message0: "clear current exp window",
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Remove all items from the current ACT-R experiment window.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_install_device",
+      message0: "install device %1",
+      args0: [
+        {
+          type: "input_value",
+          name: "DEVICE",
+        },
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Install a window or device so the model can perceive and act through it.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_start_hand_at_mouse",
+      message0: "start hand at mouse",
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Place the model's hand at the mouse for mouse-based interaction.",
+      helpUrl: "",
+    },
+    {
+      type: "actr_proc_display",
+      message0: "process display",
+      previousStatement: null,
+      nextStatement: null,
+      colour: ACTR_ENVIRONMENT,
+      tooltip: "Tell ACT-R to process the current experiment window display.",
       helpUrl: "",
     },
     {

@@ -86,6 +86,131 @@
       },
       {
         kind: "category",
+        name: "Environment",
+        colour: "#5b5fa8",
+        contents: [
+          { kind: "block", type: "actr_reset" },
+          {
+            kind: "block",
+            type: "actr_open_exp_window",
+            inputs: {
+              TITLE: {
+                shadow: {
+                  type: "text",
+                  fields: { TEXT: "Experiment" },
+                },
+              },
+              VISIBLE: {
+                shadow: {
+                  type: "logic_boolean",
+                  fields: { BOOL: "FALSE" },
+                },
+              },
+              WIDTH: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 320 },
+                },
+              },
+              HEIGHT: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 220 },
+                },
+              },
+            },
+          },
+          {
+            kind: "block",
+            type: "actr_add_text_to_exp_window",
+            inputs: {
+              TEXT: {
+                shadow: {
+                  type: "text",
+                  fields: { TEXT: "A" },
+                },
+              },
+              WINDOW: {
+                shadow: {
+                  type: "actr_symbol",
+                  fields: { VALUE: "*window*" },
+                },
+              },
+              X: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 150 },
+                },
+              },
+              Y: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 95 },
+                },
+              },
+            },
+          },
+          {
+            kind: "block",
+            type: "actr_add_button_to_exp_window",
+            inputs: {
+              TEXT: {
+                shadow: {
+                  type: "text",
+                  fields: { TEXT: "OK" },
+                },
+              },
+              X: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 120 },
+                },
+              },
+              Y: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 130 },
+                },
+              },
+              WIDTH: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 80 },
+                },
+              },
+              HEIGHT: {
+                shadow: {
+                  type: "math_number",
+                  fields: { NUM: 30 },
+                },
+              },
+              ACTION: {
+                shadow: {
+                  type: "actr_raw_value",
+                  fields: { CODE: "nil" },
+                },
+              },
+            },
+          },
+          { kind: "block", type: "actr_clear_exp_window" },
+          {
+            kind: "block",
+            type: "actr_install_device",
+            inputs: {
+              DEVICE: {
+                shadow: {
+                  type: "actr_symbol",
+                  fields: { VALUE: "*window*" },
+                },
+              },
+            },
+          },
+          { kind: "block", type: "actr_start_hand_at_mouse" },
+          { kind: "block", type: "actr_proc_display" },
+        ],
+      },
+      {
+        kind: "category",
         name: "ACT-R Values",
         colour: "#5b6472",
         contents: [

@@ -33,6 +33,7 @@ When the runner returns a timed trace, the Trace Visualizer replays buffer chang
 - ACT-R model forms: `define-model`, `sgp`, `goal-focus`, `run`, raw Lisp.
 - Declarative memory: `chunk-type`, `add-dm`, chunk definitions, slot values.
 - Productions: production rules, buffer checks, buffer queries, buffer requests, updates, clears, and trace output.
+- Environment: reset, experiment windows, text, buttons, window clearing, device install, mouse hand setup, and display processing.
 - Values: ACT-R symbols, production variables such as `=item`, `nil`, raw Lisp values, numbers, strings, booleans.
 - Basic Blockly blocks: logic, loops, math, text, lists, and variables with Lisp generation.
 

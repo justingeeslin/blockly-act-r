@@ -36,6 +36,10 @@
     return generator.valueToCode(block, name, generator.ORDER_NONE) || fallback;
   }
 
+  function isNilCode(code) {
+    return /^nil$/i.test(String(code || "").trim());
+  }
+
   function statementCode(block, name) {
     return generator.statementToCode(block, name).trimEnd();
   }
@@ -211,6 +215,47 @@
     const message = valueCode(block, "MESSAGE", quoteString("message"));
     return `!output! (${message})\n`;
   });
+
+  define("actr_reset", () => "(reset)\n");
+
+  define("actr_open_exp_window", (block) => {
+    const windowVariable = cleanSymbol(block.getFieldValue("WINDOW"), "*window*");
+    const title = valueCode(block, "TITLE", quoteString("Experiment"));
+    const visible = valueCode(block, "VISIBLE", "nil");
+    const width = valueCode(block, "WIDTH", "320");
+    const height = valueCode(block, "HEIGHT", "220");
+    return `(setf ${windowVariable} (open-exp-window ${title} :visible ${visible} :width ${width} :height ${height}))\n`;
+  });
+
+  define("actr_add_text_to_exp_window", (block) => {
+    const text = valueCode(block, "TEXT", quoteString("A"));
+    const window = valueCode(block, "WINDOW", "*window*");
+    const x = valueCode(block, "X", "0");
+    const y = valueCode(block, "Y", "0");
+    return `(add-text-to-exp-window ${window} ${text} :x ${x} :y ${y})\n`;
+  });
+
+  define("actr_add_button_to_exp_window", (block) => {
+    const text = valueCode(block, "TEXT", quoteString("OK"));
+    const x = valueCode(block, "X", "0");
+    const y = valueCode(block, "Y", "0");
+    const width = valueCode(block, "WIDTH", "80");
+    const height = valueCode(block, "HEIGHT", "30");
+    const action = valueCode(block, "ACTION", "nil");
+    const actionCode = isNilCode(action) ? "" : ` :action ${action}`;
+    return `(add-button-to-exp-window :text ${text} :x ${x} :y ${y} :width ${width} :height ${height}${actionCode})\n`;
+  });
+
+  define("actr_clear_exp_window", () => "(clear-exp-window)\n");
+
+  define("actr_install_device", (block) => {
+    const device = valueCode(block, "DEVICE", "*window*");
+    return `(install-device ${device})\n`;
+  });
+
+  define("actr_start_hand_at_mouse", () => "(start-hand-at-mouse)\n");
+
+  define("actr_proc_display", () => "(proc-display)\n");
 
   define("actr_symbol", (block) => [
     cleanSymbol(block.getFieldValue("VALUE"), "symbol"),

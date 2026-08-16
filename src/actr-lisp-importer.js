@@ -139,6 +139,10 @@
     return { kind: "atom", value: String(value) };
   }
 
+  function stringNode(value) {
+    return { kind: "string", value: String(value) };
+  }
+
   function parseLisp(source) {
     const tokens = tokenize(String(source || ""));
     let cursor = 0;
@@ -221,6 +225,10 @@
     return symbolName(node).toLowerCase();
   }
 
+  function isKeywordNode(node) {
+    return isAtom(node) && symbolName(node).startsWith(":");
+  }
+
   function headLower(node) {
     return isList(node) && node.items.length ? lowerSymbol(node.items[0]) : "";
   }
@@ -255,6 +263,22 @@
     }
 
     return nodeToSource(node) || fallback;
+  }
+
+  function keywordValueFromItems(items, keyword) {
+    const target = String(keyword || "").toLowerCase();
+
+    for (let index = 0; index < items.length - 1; index += 1) {
+      if (lowerSymbol(items[index]) === target) {
+        return items[index + 1];
+      }
+    }
+
+    return null;
+  }
+
+  function keywordValueBlock(items, keyword, fallbackNode) {
+    return valueBlockFor(keywordValueFromItems(items, keyword) || fallbackNode);
   }
 
   function xmlEscape(value) {
@@ -515,6 +539,79 @@
     });
   }
 
+  function openExpWindowBlockFor(form, windowName = "*window*") {
+    const items = form.items;
+    const keywordItems = items.slice(2);
+
+    return block("actr_open_exp_window", {
+      fields: {
+        WINDOW: windowName,
+      },
+      values: {
+        TITLE: valueBlockFor(items[1] || stringNode("Experiment")),
+        VISIBLE: keywordValueBlock(keywordItems, ":visible", atom("nil")),
+        WIDTH: keywordValueBlock(keywordItems, ":width", atom("320")),
+        HEIGHT: keywordValueBlock(keywordItems, ":height", atom("220")),
+      },
+    });
+  }
+
+  function setfBlockFor(form) {
+    const value = form.items[2];
+
+    if (form.items.length === 3 && value && headLower(value) === "open-exp-window") {
+      return openExpWindowBlockFor(value, textForField(form.items[1], "*window*"));
+    }
+
+    return rawStatementBlock(nodeToSource(form));
+  }
+
+  function addTextToExpWindowBlockFor(form) {
+    const args = form.items.slice(1);
+    let keywordItems = args;
+    let textNode = keywordValueFromItems(keywordItems, ":text");
+    let windowNode = atom("*window*");
+
+    if (!textNode && args.length >= 2 && !isKeywordNode(args[0])) {
+      windowNode = args[0];
+      textNode = args[1];
+      keywordItems = args.slice(2);
+    }
+
+    return block("actr_add_text_to_exp_window", {
+      values: {
+        TEXT: valueBlockFor(textNode || stringNode("A")),
+        WINDOW: valueBlockFor(windowNode),
+        X: keywordValueBlock(keywordItems, ":x", atom("0")),
+        Y: keywordValueBlock(keywordItems, ":y", atom("0")),
+      },
+    });
+  }
+
+  function addButtonToExpWindowBlockFor(form) {
+    const args = form.items.slice(1);
+    const keywordItems = args.length && !isKeywordNode(args[0]) ? args.slice(1) : args;
+
+    return block("actr_add_button_to_exp_window", {
+      values: {
+        TEXT: keywordValueBlock(keywordItems, ":text", stringNode("OK")),
+        X: keywordValueBlock(keywordItems, ":x", atom("0")),
+        Y: keywordValueBlock(keywordItems, ":y", atom("0")),
+        WIDTH: keywordValueBlock(keywordItems, ":width", atom("80")),
+        HEIGHT: keywordValueBlock(keywordItems, ":height", atom("30")),
+        ACTION: keywordValueBlock(keywordItems, ":action", atom("nil")),
+      },
+    });
+  }
+
+  function installDeviceBlockFor(form) {
+    return block("actr_install_device", {
+      values: {
+        DEVICE: valueBlockFor(form.items[1] || atom("*window*")),
+      },
+    });
+  }
+
   function bufferHeadFor(node) {
     const match = symbolName(node).match(/^([=+?\-])(.+)>$/);
     return match
@@ -733,6 +830,22 @@
         return [runBlockFor(form)];
       case "p":
         return [productionBlockFor(form)];
+      case "reset":
+        return form.items.length === 1 ? [block("actr_reset")] : [rawStatementBlock(nodeToSource(form))];
+      case "setf":
+        return [setfBlockFor(form)];
+      case "add-text-to-exp-window":
+        return [addTextToExpWindowBlockFor(form)];
+      case "add-button-to-exp-window":
+        return [addButtonToExpWindowBlockFor(form)];
+      case "clear-exp-window":
+        return form.items.length === 1 ? [block("actr_clear_exp_window")] : [rawStatementBlock(nodeToSource(form))];
+      case "install-device":
+        return [installDeviceBlockFor(form)];
+      case "start-hand-at-mouse":
+        return form.items.length === 1 ? [block("actr_start_hand_at_mouse")] : [rawStatementBlock(nodeToSource(form))];
+      case "proc-display":
+        return form.items.length === 1 ? [block("actr_proc_display")] : [rawStatementBlock(nodeToSource(form))];
       default:
         return [rawStatementBlock(nodeToSource(form))];
     }
