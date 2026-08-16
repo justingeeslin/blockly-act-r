@@ -377,16 +377,20 @@ h2 {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(86px, 1fr) minmax(112px, 1.18fr) minmax(86px, 1fr);
-  grid-template-rows: minmax(50px, 0.95fr) repeat(5, minmax(31px, 0.82fr)) minmax(40px, 0.72fr);
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  grid-template-rows:
+    minmax(50px, 0.9fr)
+    minmax(34px, 0.62fr)
+    repeat(2, minmax(38px, 0.84fr))
+    minmax(34px, 0.66fr)
+    minmax(40px, 0.72fr);
   grid-template-areas:
-    "declarative declarative declarative"
-    "retrieval productions visual"
-    "goal productions visualLocation"
-    "imaginal productions manual"
-    "vocal productions aural"
-    "temporal productions auxiliary"
-    "environment environment environment";
+    "declarative declarative declarative declarative"
+    "goal goal retrieval retrieval"
+    "imaginal productions productions vocal"
+    "temporal productions productions auxiliary"
+    "visual visualLocation manual aural"
+    "environment environment environment environment";
   gap: 8px;
   height: 100%;
   min-height: 0;

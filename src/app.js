@@ -486,7 +486,8 @@
     "temporal",
   ];
   const coreArchitectureBuffers = new Set(defaultBuffers);
-  const environmentBuffers = new Set(["visual-location", "visual", "manual"]);
+  const declarativeBridgeBuffers = new Set(["goal", "retrieval"]);
+  const environmentBuffers = new Set(["visual-location", "visual", "manual", "aural"]);
   let traceFrames = [];
   let traceFrameIndex = 0;
   let tracePlaybackTimer = null;
@@ -636,6 +637,23 @@
   function declarativeChunkNodeId(chunk) {
     const key = typeof chunk === "string" ? chunk : chunk && chunk.key;
     return key ? `declarative-chunk:${normalizeTraceKey(key)}` : "declarative-memory";
+  }
+
+  function sourceForBufferSet(buffer, catalogChunk) {
+    const bufferKey = normalizeBufferName(buffer);
+
+    if (declarativeBridgeBuffers.has(bufferKey)) {
+      return {
+        from: catalogChunk ? declarativeChunkNodeId(catalogChunk) : "declarative-memory",
+        edgeFrom: "declarative-memory",
+      };
+    }
+
+    if (environmentBuffers.has(bufferKey)) {
+      return { from: "environment" };
+    }
+
+    return { from: "productions" };
   }
 
   function escapeHtml(value) {
@@ -1191,8 +1209,7 @@
 
       event.motion = nextChunk
         ? {
-            from: catalogChunk ? declarativeChunkNodeId(catalogChunk) : "declarative-memory",
-            edgeFrom: "declarative-memory",
+            ...sourceForBufferSet(event.buffer, catalogChunk),
             to: bufferNodeId(event.buffer),
             buffer: event.buffer,
             label: nextChunk.name,
@@ -1488,10 +1505,16 @@
     for (const buffer of order) {
       const bufferNode = bufferNodeId(buffer);
       edges.push(
-        { from: "declarative-memory", to: bufferNode, kind: "memory" },
         { from: bufferNode, to: "productions", kind: "buffer-read" },
         { from: "productions", to: bufferNode, kind: "buffer-write" },
       );
+
+      if (declarativeBridgeBuffers.has(buffer)) {
+        edges.push(
+          { from: "declarative-memory", to: bufferNode, kind: "memory" },
+          { from: bufferNode, to: "declarative-memory", kind: "memory" },
+        );
+      }
 
       if (environmentBuffers.has(buffer)) {
         edges.push(
