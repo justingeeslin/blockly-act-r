@@ -653,12 +653,12 @@
     {
       id: "fitts-law",
       name: "Fitts' Law",
-      meta: "Button target, visual attention, mouse movement, and click",
+      meta: "Visual target and spatial reach (requires actr-motor-point on the runner)",
       lisp: `
         (clear-all)
 
         (define-model fitts-law
-          (sgp :v t :trace-detail high :show-focus t :needs-mouse t :incremental-mouse-moves t)
+          (sgp :v t :trace-detail high :show-focus t)
           (chunk-type goal state)
 
           (add-dm
@@ -676,55 +676,80 @@
           ==>
             +visual-location>
               isa visual-location
+              kind text
               :attended nil
             =goal>
-              state attend-and-move
+              state attend-target
           )
 
-          (p attend-and-move
+          (p attend-target
             =goal>
               isa goal
-              state attend-and-move
+              state attend-target
             =visual-location>
               isa visual-location
             ?visual>
-              state free
-            ?manual>
               state free
           ==>
             +visual>
               isa move-attention
               screen-pos =visual-location
-            +manual>
-              isa move-cursor
-              loc =visual-location
             =goal>
-              state click-target
+              state reach-target
           )
 
-          (p click-target
+          (p reach-target
             =goal>
               isa goal
-              state click-target
+              state reach-target
+            =visual-location>
+              screen-x =screen-x
+              screen-y =screen-y
+            =visual>
+              value "Target"
             ?manual>
               state free
           ==>
+            !bind! =target-x (/ =screen-x 10)
+            !bind! =target-y (/ =screen-y 10)
             +manual>
-              isa click-mouse
+              isa reach
+              limb right-hand
+              target-x =target-x
+              target-y =target-y
+              target-z 0
+              target-width 4.2
             =goal>
               state done
-            !output! ("clicked target")
           )
         )
 
+        (defun fitts-target-pressed ()
+          (format t "clicked target~%"))
+
+        (defun fitts-reach-contact (model limb position width distance movement-time)
+          (declare (ignore model width distance movement-time))
+          (when (and (eq limb 'right-hand)
+                     (<= 28.2 (first position) 37.8)
+                     (<= 11.2 (second position) 15.4)
+                     (zerop (third position)))
+            (fitts-target-pressed)))
+
+        (add-act-r-command "fitts-target-pressed" 'fitts-target-pressed "Press the target button.")
+        (add-act-r-command "fitts-reach-contact" 'fitts-reach-contact "Press the target on reach contact.")
+        (monitor-act-r-command "reach-complete" "fitts-reach-contact")
+
         (defvar *fitts-window* nil)
         (reset)
+        (configure-reach-limb 'right-hand :position '(2 13.3 0) :a 0.05 :b 0.10)
         (setf *fitts-window* (open-exp-window "Fitts' Law" :visible nil :width 420 :height 260))
-        (add-button-to-exp-window *fitts-window* :text "Target" :x 282 :y 112 :width 96 :height 42)
+        (add-button-to-exp-window *fitts-window* :text "Target" :x 282 :y 112 :width 96 :height 42 :action "fitts-target-pressed")
         (install-device *fitts-window*)
-        (start-hand-at-mouse)
         (proc-display)
         (run 3)
+        (remove-act-r-command-monitor "reach-complete" "fitts-reach-contact")
+        (remove-act-r-command "fitts-reach-contact")
+        (remove-act-r-command "fitts-target-pressed")
       `,
     },
   ];

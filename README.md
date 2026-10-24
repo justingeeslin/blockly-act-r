@@ -18,7 +18,9 @@ The app loads Blockly from a pinned CDN and keeps the ACT-R blocks and generator
 
 Use **Load** to open either a saved Blockly XML workspace or an ACT-R Lisp model file (`.lisp`, `.lsp`, or `.cl`). Lisp imports are converted into editable blocks for supported ACT-R forms; unsupported Lisp is preserved as raw Lisp blocks.
 
-Use **Samples** to load an included model. The menu includes the original counting sample, a visual/motor sample that attends to a letter in a window and presses the matching key, and a Fitts' Law sample that sees a target button, moves the cursor to it, and clicks it.
+Use **Samples** to load an included model. The menu includes the original counting sample, a visual/motor sample that attends to a letter in a window and presses the matching key, and a Fitts' Law sample that sees a target button and reaches to press it.
+
+The Fitts' Law sample uses [actr-motor-point](https://github.com/justingeeslin/actr-motor-point). Load its `motor-reach.lisp` extension into ACT-R **once before defining the model**; the hosted runner also needs that extension installed server-side. The sample maps 10 screen pixels to 1 cm on a flat panel, configures the right hand after `reset`, and treats a `reach-complete` event inside the button bounds as a press. The extension reports contact but does not move or click the mouse cursor.
 
 ## Run a Model
 
