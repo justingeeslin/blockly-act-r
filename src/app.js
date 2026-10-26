@@ -1,4 +1,18 @@
 (function bootActrBlockly() {
+  const options = window.ACTREditorOptions || {};
+  let disposed = false;
+  let activeRun = null;
+  let eventsConnected = false;
+  const startupErrors = [];
+  function emit(type, detail) {
+    if (!disposed) window.dispatchEvent(new CustomEvent(type, { detail }));
+  }
+  function reportError(error, operation) {
+    const detail = { message: error.message, operation };
+    if (eventsConnected) emit("actr-error", detail);
+    else startupErrors.push(detail);
+  }
+
   const toolbox = {
     kind: "categoryToolbox",
     contents: [
@@ -757,6 +771,7 @@
 
   const workspace = Blockly.inject("blocklyDiv", {
     toolbox,
+    sounds: false,
     renderer: "zelos",
     trashcan: true,
     collapse: true,
@@ -804,9 +819,9 @@
   const declarativeChunkList = document.getElementById("declarativeChunkList");
   const bufferGrid = document.getElementById("bufferGrid");
   const chunkToken = document.getElementById("chunkToken");
-  const storageKey = "blockly-act-r-workspace";
-  const runnerEndpoint = "https://act-r-2649d1971396.herokuapp.com/run-model";
-  const generatedModelUrlBase = "https://httpbingo.org/base64/";
+  let storageKey = options.storageKey || null;
+  let runnerEndpoint = options.runnerEndpoint ?? "https://act-r-2649d1971396.herokuapp.com/run-model";
+  let generatedModelUrlBase = options.modelUrlBase ?? "https://httpbingo.org/base64/";
   const defaultRunSeconds = 5;
   const defaultBuffers = [
     "goal",
@@ -847,6 +862,7 @@
     } catch (error) {
       codeOutput.textContent = `; Generator error: ${error.message}`;
       setStatus("Generator error");
+      reportError(error, "generate");
       return "";
     }
   }
@@ -1996,6 +2012,7 @@
     traceSlider.disabled = !hasFrames;
     traceSlider.max = String(Math.max(traceFrames.length - 1, 0));
     traceSlider.value = String(traceFrameIndex);
+    emit("actr-trace-change", traceState());
 
     const label = traceIsPlaying ? "Pause" : "Play";
     tracePlayButton.querySelector("span").textContent = label;
@@ -2027,6 +2044,16 @@
     if (animate && frame.event && frame.event.motion) {
       requestAnimationFrame(() => animateChunkMotion(frame.event.motion));
     }
+  }
+
+  function traceState() {
+    const frame = traceFrames[traceFrameIndex];
+    return {
+      index: traceFrameIndex, total: traceFrames.length,
+      time: frame ? frame.time : 0, playing: traceIsPlaying,
+      event: frame && frame.event ? frame.event.label : null,
+      activeBlockId: frame ? frame.activeBlockId : null,
+    };
   }
 
   function setTraceFrame(index, animate = false) {
@@ -2103,7 +2130,7 @@
     updateTraceControls();
   }
 
-  function loadTraceVisualizer(traceText) {
+  function loadTraceVisualizer(traceText, autoplay = true) {
     const events = parseTraceEvents(traceText);
 
     if (!events.length) {
@@ -2119,69 +2146,114 @@
     traceFrames = buildTraceFrames(events, context);
     traceFrameIndex = 0;
     renderTraceFrame(traceFrames[0], false);
-    playTrace();
+    if (autoplay) playTrace();
     return true;
   }
 
-  async function runModel() {
-    const code = generateCode();
+  function cancelRun() {
+    if (activeRun) {
+      activeRun.abort();
+      activeRun = null;
+      if (!disposed) {
+        runButton.disabled = !runnerEndpoint;
+        runButton.removeAttribute("aria-busy");
+        setRunStatus("Cancelled");
+        emit("actr-run", { status: "cancelled" });
+      }
+    }
+  }
 
-    if (!code.trim()) {
-      setRunStatus("No model");
-      runOutput.textContent = "; Add ACT-R blocks before running.";
-      return;
+  async function runModel() {
+    cancelRun();
+    const code = generateCode();
+    if (!code.trim() || !runnerEndpoint) {
+      const error = new Error(!runnerEndpoint ? "Set runner-endpoint before running a model." : "Add ACT-R blocks before running.");
+      setRunStatus("Cannot run");
+      runOutput.textContent = `; ${error.message}`;
+      reportError(error, "run");
+      throw error;
     }
 
     const runSeconds = inferRunSeconds(code);
-    const modelUrl = createGeneratedModelUrl(code);
+    const controller = new AbortController();
+    activeRun = controller;
     runButton.disabled = true;
     runButton.setAttribute("aria-busy", "true");
     setRunStatus("Running");
     runOutput.textContent = `Submitting model for a ${formatSeconds(runSeconds)} run...`;
     resetTraceVisualizer("Trace pending");
+    emit("actr-run", { status: "running" });
 
     try {
       const response = await fetch(runnerEndpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model_url: modelUrl,
-          run_seconds: runSeconds,
-        }),
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_url: createGeneratedModelUrl(code), run_seconds: runSeconds }),
       });
       const text = await response.text();
-      let result = null;
-
+      let result;
       try {
         result = text ? JSON.parse(text) : null;
-      } catch (error) {
+      } catch {
         throw new Error(`Runner returned non-JSON response (${response.status}).`);
       }
-
       if (!response.ok || !result || result.ok === false) {
-        const runError = new Error((result && result.error) || `Runner returned HTTP ${response.status}.`);
-        runError.result = result;
-        throw runError;
+        const error = new Error((result && result.error) || `Runner returned HTTP ${response.status}.`);
+        error.result = result;
+        throw error;
       }
-
+      if (disposed || activeRun !== controller) throw new DOMException("Run cancelled.", "AbortError");
       runOutput.textContent = formatRunResult(result, code.length);
       setRunStatus(loadTraceVisualizer(getTraceText(result)) ? "Complete - visualizing" : "Complete");
+      emit("actr-run", { status: "complete", result });
+      return result;
     } catch (error) {
-      setRunStatus("Failed");
-      runOutput.textContent = formatRunError(error, error.result);
-      resetTraceVisualizer("No trace");
+      if (controller.signal.aborted) throw new DOMException("Run cancelled.", "AbortError");
+      if (!disposed && activeRun === controller && error.name !== "AbortError") {
+        setRunStatus("Failed");
+        runOutput.textContent = formatRunError(error, error.result);
+        resetTraceVisualizer("No trace");
+        emit("actr-run", { status: "failed", message: error.message });
+        reportError(error, "run");
+      }
+      throw error;
     } finally {
-      runButton.disabled = false;
-      runButton.removeAttribute("aria-busy");
+      if (!disposed && activeRun === controller) {
+        activeRun = null;
+        runButton.disabled = !runnerEndpoint;
+        runButton.removeAttribute("aria-busy");
+      }
     }
   }
 
+  function getXml() {
+    return Blockly.Xml.domToPrettyText(Blockly.Xml.workspaceToDom(workspace));
+  }
+
+  function notifyChange() {
+    cancelRun();
+    const lisp = generateCode();
+    resetTraceVisualizer("No trace");
+    emit("actr-change", { xml: getXml(), lisp });
+  }
+
   function loadXmlText(xmlText) {
+    if (typeof xmlText !== "string") throw new TypeError("Workspace XML must be a string.");
     const xml = Blockly.Xml.textToDom
       ? Blockly.Xml.textToDom(xmlText)
       : Blockly.utils.xml.textToDom(xmlText);
+
+    if (xml.localName !== "xml" || xml.getElementsByTagName("parsererror").length) {
+      throw new Error("Expected a Blockly <xml> workspace.");
+    }
+    // Validate in a headless workspace before replacing the current model.
+    const validationWorkspace = new Blockly.Workspace();
+    try {
+      Blockly.Xml.domToWorkspace(xml.cloneNode(true), validationWorkspace);
+    } finally {
+      validationWorkspace.dispose();
+    }
 
     if (Blockly.Events && Blockly.Events.disable) {
       Blockly.Events.disable();
@@ -2198,8 +2270,7 @@
 
     Blockly.svgResize(workspace);
     workspace.scrollCenter();
-    generateCode();
-    resetTraceVisualizer("No trace");
+    notifyChange();
   }
 
   function isXmlWorkspaceText(text, file) {
@@ -2285,21 +2356,47 @@
   }
 
   function saveWorkspace() {
-    const xml = Blockly.Xml.workspaceToDom(workspace);
-    const text = Blockly.Xml.domToPrettyText(xml);
-    localStorage.setItem(storageKey, text);
-    setStatus("Saved");
+    const xml = getXml();
+    try {
+      if (storageKey) localStorage.setItem(storageKey, xml);
+      setStatus(storageKey ? "Saved" : "Exported");
+      emit("actr-save", { xml, lisp: generateCode() });
+      return xml;
+    } catch (error) {
+      setStatus("Save failed");
+      reportError(error, "save");
+      throw error;
+    }
+  }
+
+  function loadSampleById(id) {
+    if (id === "none") {
+      workspace.clear();
+      notifyChange();
+      return;
+    }
+    const sample = samples.find((entry) => entry.id === id);
+    if (!sample) throw new Error(`Unknown sample: ${id}`);
+    loadSampleWorkspace(sample);
   }
 
   function restoreWorkspace() {
-    const saved = localStorage.getItem(storageKey);
-
-    if (saved) {
-      loadXmlText(saved);
+    if (options.initialXml !== undefined) {
+      loadXmlText(options.initialXml);
       return;
     }
-
-    loadSampleWorkspace(defaultSample);
+    if (storageKey) {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          loadXmlText(saved);
+          return;
+        }
+      } catch (error) {
+        reportError(error, "restore");
+      }
+    }
+    loadSampleById(options.sample || defaultSample.id);
   }
 
   function download(filename, content, mimeType) {
@@ -2316,7 +2413,7 @@
 
   renderSampleMenu();
 
-  runButton.addEventListener("click", runModel);
+  runButton.addEventListener("click", () => { runModel().catch(() => {}); });
 
   traceBackButton.addEventListener("click", () => {
     stopTracePlayback();
@@ -2410,8 +2507,13 @@
 
   document.getElementById("copyButton").addEventListener("click", async () => {
     const code = codeOutput.textContent;
-    await navigator.clipboard.writeText(code);
-    setStatus("Copied");
+    try {
+      await navigator.clipboard.writeText(code);
+      setStatus("Copied");
+    } catch (error) {
+      setStatus("Copy failed");
+      reportError(error, "copy");
+    }
   });
 
   document.getElementById("downloadButton").addEventListener("click", () => {
@@ -2419,7 +2521,9 @@
     setStatus("Downloaded");
   });
 
-  document.getElementById("saveButton").addEventListener("click", saveWorkspace);
+  document.getElementById("saveButton").addEventListener("click", () => {
+    try { saveWorkspace(); } catch { /* Error is reported by saveWorkspace. */ }
+  });
 
   document.getElementById("loadButton").addEventListener("click", () => {
     loadInput.click();
@@ -2441,6 +2545,7 @@
       const format = loadWorkspaceText(text, file);
       setStatus(format === "lisp" ? "Lisp imported" : "Loaded");
     } catch (error) {
+      reportError(error, "load");
       setStatus("Load failed");
       setRunStatus("Load failed");
       runOutput.textContent = `; Load failed: ${error.message}`;
@@ -2453,14 +2558,54 @@
     if (event.isUiEvent) {
       return;
     }
-    generateCode();
-    resetTraceVisualizer("No trace");
+    if (!disposed) notifyChange();
   });
 
-  window.addEventListener("resize", () => {
+  function resize() {
+    if (disposed) return;
     Blockly.svgResize(workspace);
     drawArchitectureEdges(traceFrames[traceFrameIndex] || null);
-  });
+  }
+  window.addEventListener("resize", resize);
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(visualizerStage);
+
+  window.ACTREditor = {
+    connectEvents() { eventsConnected = true; return startupErrors.splice(0); },
+    getXml,
+    getLisp: generateCode,
+    loadXml: loadXmlText,
+    loadLisp: loadLispText,
+    loadSample: loadSampleById,
+    getSamples: () => samples.map(({ id, name, meta }) => ({ id, name, meta })),
+    loadTrace(text, { autoplay = true } = {}) {
+      runOutput.textContent = text;
+      return loadTraceVisualizer(text, autoplay);
+    },
+    getTraceState: traceState,
+    playTrace,
+    pauseTrace: stopTracePlayback,
+    seekTrace(index) { stopTracePlayback(); setTraceFrame(index); },
+    clear() { workspace.clear(); notifyChange(); },
+    save: saveWorkspace,
+    run: runModel,
+    configure(config) {
+      if ("runnerEndpoint" in config) { cancelRun(); runnerEndpoint = config.runnerEndpoint; }
+      if ("modelUrlBase" in config) generatedModelUrlBase = config.modelUrlBase;
+      if ("storageKey" in config) storageKey = config.storageKey || null;
+      runButton.disabled = !!activeRun || !runnerEndpoint;
+    },
+    dispose() {
+      disposed = true;
+      cancelRun();
+      clearTimeout(tracePlaybackTimer);
+      clearTimeout(traceMotionTimer);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", resize);
+      workspace.dispose();
+    },
+  };
+  runButton.disabled = !runnerEndpoint;
   resetTraceVisualizer();
   restoreWorkspace();
 })();

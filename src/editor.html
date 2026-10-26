@@ -1,0 +1,110 @@
+<header class="app-header">
+      <div class="title-group">
+        <h1>Blockly ACT-R</h1>
+        <span class="build-label">Lisp model builder</span>
+      </div>
+      <nav class="toolbar" aria-label="Workspace actions">
+        <button id="runButton" type="button" class="play" title="Run model" aria-label="Run model">
+          <span aria-hidden="true">Run</span>
+        </button>
+        <div class="sample-picker">
+          <button
+            id="sampleButton"
+            type="button"
+            title="Show sample models"
+            aria-label="Show sample models"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="samplesMenu"
+          >
+            <span aria-hidden="true">Samples</span>
+          </button>
+          <div id="samplesMenu" class="samples-menu" role="menu" aria-label="Sample models" hidden></div>
+        </div>
+        <button id="copyButton" type="button" title="Copy Lisp" aria-label="Copy Lisp">
+          <span aria-hidden="true">Copy</span>
+        </button>
+        <button id="downloadButton" type="button" title="Download Lisp" aria-label="Download Lisp">
+          <span aria-hidden="true">Download</span>
+        </button>
+        <button id="saveButton" type="button" title="Save blocks" aria-label="Save blocks">
+          <span aria-hidden="true">Save</span>
+        </button>
+        <button id="loadButton" type="button" title="Load blocks or Lisp" aria-label="Load blocks or Lisp">
+          <span aria-hidden="true">Load</span>
+        </button>
+        <button id="clearButton" type="button" class="danger" title="Clear workspace" aria-label="Clear workspace">
+          <span aria-hidden="true">Clear</span>
+        </button>
+      </nav>
+    </header>
+
+    <main class="app-layout">
+      <section class="workspace-shell" aria-label="Blockly workspace">
+        <div id="blocklyDiv"></div>
+      </section>
+      <aside class="code-shell" aria-label="Generated ACT-R Lisp, run output, and trace visualizer">
+        <div class="code-header">
+          <h2>ACT-R Lisp</h2>
+          <span id="statusText" role="status" aria-live="polite">Ready</span>
+        </div>
+        <pre id="codeOutput" tabindex="0"></pre>
+        <div class="run-header">
+          <h2>Run Output</h2>
+          <span id="runStatusText" role="status" aria-live="polite">Idle</span>
+        </div>
+        <pre id="runOutput" tabindex="0"></pre>
+        <div class="visualizer-header">
+          <h2>Trace Visualizer</h2>
+          <div class="visualizer-controls" aria-label="Trace playback controls">
+            <button id="traceBackButton" type="button" title="Previous trace event" aria-label="Previous trace event">
+              <span aria-hidden="true">Prev</span>
+            </button>
+            <button id="tracePlayButton" type="button" title="Play trace" aria-label="Play trace">
+              <span aria-hidden="true">Play</span>
+            </button>
+            <button id="traceForwardButton" type="button" title="Next trace event" aria-label="Next trace event">
+              <span aria-hidden="true">Next</span>
+            </button>
+            <label class="trace-speed">
+              <span>Speed</span>
+              <select id="traceSpeedSelect" aria-label="Trace playback speed">
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
+                <option value="1">1x</option>
+                <option value="2" selected>2x</option>
+                <option value="5">5x</option>
+                <option value="10">10x</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <section id="traceVisualizer" class="trace-visualizer" aria-label="ACT-R buffer trace visualizer">
+          <div class="trace-meter">
+            <output id="traceTimeLabel">0.000s</output>
+            <input id="traceSlider" type="range" min="0" max="0" value="0" aria-label="Trace event" />
+          </div>
+          <div id="visualizerStage" class="visualizer-stage" aria-live="polite">
+            <svg id="architectureEdges" class="architecture-edges" aria-hidden="true"></svg>
+            <div class="architecture-layer">
+              <div id="memoryNode" class="architecture-node memory-node" data-node="declarative-memory">
+                <span class="node-title">Declarative memory</span>
+                <div id="declarativeChunkList" class="memory-chunk-list" aria-label="Declarative memory chunks"></div>
+              </div>
+              <div class="architecture-node productions-node" data-node="productions">
+                <span class="node-title">Productions</span>
+              </div>
+              <div id="bufferGrid" class="buffer-grid"></div>
+              <div class="architecture-node environment-node" data-node="environment">
+                <span class="node-title">Environment</span>
+              </div>
+            </div>
+            <div id="chunkToken" class="chunk-token" aria-hidden="true"></div>
+          </div>
+          <div id="traceEventLabel" class="trace-event-label">No trace</div>
+        </section>
+      </aside>
+    </main>
+
+    <input id="loadInput" type="file" accept=".xml,.lisp,.lsp,.cl,text/xml,text/x-common-lisp,text/plain" hidden />

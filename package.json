@@ -1,0 +1,30 @@
+{
+  "name": "blockly-act-r",
+  "version": "1.0.0",
+  "description": "A self-contained web component for editing ACT-R models with Blockly and visualizing execution traces.",
+  "type": "module",
+  "main": "./dist/blockly-act-r.js",
+  "module": "./dist/blockly-act-r.js",
+  "types": "./dist/blockly-act-r.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/blockly-act-r.d.ts",
+      "import": "./dist/blockly-act-r.js",
+      "default": "./dist/blockly-act-r.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "npm run build && python3 -m http.server 5173 --bind 127.0.0.1",
+    "test": "npm run build && playwright test",
+    "prepack": "npm run build"
+  },
+  "keywords": ["act-r", "blockly", "web-component", "custom-element", "lisp"],
+  "engines": {"node": ">=20"},
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "blockly": "10.4.3"
+  }
+}

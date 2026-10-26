@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Embed Blockly ACT-R</title>
+    <script type="module" src="../dist/blockly-act-r.js"></script>
+    <style>
+      body { margin: 24px; font: 16px system-ui, sans-serif; color: #1d252b; background: #f5f7f8; }
+      button { padding: 8px 12px; margin: 0 8px 12px 0; }
+      blockly-act-r { height: 850px; border: 1px solid #d8e0e4; border-radius: 8px; overflow: hidden; }
+      pre { padding: 16px; background: white; overflow: auto; max-height: 200px; }
+    </style>
+  </head>
+  <body>
+    <h1>Blockly ACT-R in a host application</h1>
+    <p>These editors have independent models and trace playback. Save events let your application store workspace XML.</p>
+    <button id="export" type="button">Read generated Lisp</button>
+    <button id="trace" type="button">Play an example trace</button>
+    <output id="status" role="status">Loading…</output>
+    <blockly-act-r id="editor" runner-endpoint=""></blockly-act-r>
+    <pre id="output">Generated Lisp will appear here.</pre>
+    <h2>A second, independent editor</h2>
+    <blockly-act-r id="second" sample="none" runner-endpoint="" style="height: 700px"></blockly-act-r>
+    <script type="module">
+      await customElements.whenDefined("blockly-act-r");
+      const editor = document.querySelector("#editor");
+      await editor.ready;
+      document.querySelector("#status").textContent = "Ready";
+      document.querySelector("#export").addEventListener("click", async () => {
+        document.querySelector("#output").textContent = await editor.getLisp();
+      });
+      document.querySelector("#trace").addEventListener("click", () => editor.loadTrace([
+        "0.050 PROCEDURAL PRODUCTION-FIRED REQUEST-NEXT",
+        "0.150 DECLARATIVE SET-BUFFER-CHUNK RETRIEVAL ONE-TWO",
+        "0.200 PROCEDURAL PRODUCTION-FIRED USE-NEXT",
+      ].join("\n")));
+      editor.addEventListener("actr-save", (event) => {
+        // Send event.detail.xml to your application's persistence layer here.
+        document.querySelector("#status").textContent = `Exported ${event.detail.xml.length} characters of workspace XML`;
+      });
+    </script>
+  </body>
+</html>
